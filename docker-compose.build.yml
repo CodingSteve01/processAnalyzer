@@ -1,0 +1,8 @@
+# Local build override — use instead of pulling from GHCR:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  processanalyzer:
+    build:
+      context: .
+      dockerfile: ProcessAnalyzer.Web/Dockerfile
+    image: ghcr.io/codingsteve01/processanalyzer:local

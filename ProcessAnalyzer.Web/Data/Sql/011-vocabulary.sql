@@ -1,0 +1,8 @@
+-- Intentionally without statements.
+--
+-- This step used to redefine analytics.activity_of to reach for one more payload attribute on one more family of
+-- types. Which attribute names a step is a property of the source, so the rules moved into ocel.discriminator_rule
+-- (017) and are loaded from the vocabulary. The final definition of the function lives there.
+--
+-- The file stays because the migration that runs it has been applied everywhere already. Removing it would break that
+-- migration on a database that has not caught up yet, and renumbering the files after it would break all of them.

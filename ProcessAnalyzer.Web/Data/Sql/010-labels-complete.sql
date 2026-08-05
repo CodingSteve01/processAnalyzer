@@ -1,0 +1,8 @@
+-- Intentionally without statements.
+--
+-- This step used to carry the label rows themselves. They are configuration — which types a source declares and what
+-- each step is called differ per installation — so they are loaded at startup from the vocabulary instead
+-- (VocabularyLoader). The rules that render a label ship in 005 and 012 and are unaffected.
+--
+-- The file stays because the migration that runs it has been applied everywhere already. Removing it would break that
+-- migration on a database that has not caught up yet, and renumbering the files after it would break all of them.

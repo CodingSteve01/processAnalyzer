@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ProcessAnalyzer.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.3" />
+    <!-- SOURCE side only: the journal is read with raw ADO.NET. No EF provider for SQL Server is
+         referenced on purpose — an EF context against the source would invite migrations and writes against
+         a database we are only ever allowed to read. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
+    <!-- OCEL 2.0's relational serialization is a SQLite file; this writes it, nothing here uses SQLite as a store. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!--
+      Pinned above what Microsoft.Data.Sqlite resolves: everything up to 2.1.11 carries GHSA-2m69-gcr7-jv3q, a
+      vulnerable SQLite build, and the advisory names no patched 2.x. The 3.x bundle ships a current SQLite. The override is
+      explicit rather than a NuGet warning suppression, because suppressing it would keep the vulnerable binary and
+      only silence the report.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Schema that is SQL, not a model: functions, materialized views, seeded rule tables. Embedded so a
+         migration can run it from the assembly and can never drift from a file that did not ship. -->
+    <EmbeddedResource Include="Data/Sql/*.sql" />
+  </ItemGroup>
+</Project>

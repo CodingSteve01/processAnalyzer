@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: processanalyzer-db
+    restart: unless-stopped
+    shm_size: '256m'
+    command: >
+      postgres
+      -c random_page_cost=1.1
+      -c work_mem=8MB
+      -c effective_cache_size=512MB
+      -c maintenance_work_mem=64MB
+    environment:
+      POSTGRES_USER: processanalyzer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: process
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # 5434 on the host, not 5432: another Postgres may already own 5432 there, and a
+      # port clash would leave whichever stack starts second silently talking to the
+      # wrong database.
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U processanalyzer -d process"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  processanalyzer:
+    # Defaults to local image to avoid accidental downgrade to stale registry builds.
+    # Override via .env, e.g. PROCESSANALYZER_IMAGE=ghcr.io/codingsteve01/processanalyzer:latest
+    image: ${PROCESSANALYZER_IMAGE:-ghcr.io/codingsteve01/processanalyzer:local}
+    pull_policy: ${PROCESSANALYZER_PULL_POLICY:-never}
+    container_name: processanalyzer-web
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5100:5100"
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=process;Username=processanalyzer;Password=${POSTGRES_PASSWORD}
+      # The source is a database, not a share — there is no volume mount here on purpose.
+      # This login must be read-only; see .env.example for what it needs to be granted.
+      - ProcessAnalyzer__SourceConnectionString=${SOURCE_CONNECTION_STRING}
+      # Rows younger than LagSeconds are held back. A journal row becomes visible to a
+      # reader at commit time, not at insert time, so a row with a lower id can appear
+      # after a higher one. Reading right up to "now" would advance the watermark past
+      # a row that had not committed yet and that row would never be pulled again.
+      - ProcessAnalyzer__LagSeconds=${LAG_SECONDS:-120}
+      - ProcessAnalyzer__PullIntervalSeconds=${PULL_INTERVAL_SECONDS:-60}
+      - ProcessAnalyzer__BatchSize=${BATCH_SIZE:-5000}
+      - ProcessAnalyzer__MaxPagesPerRun=${MAX_PAGES_PER_RUN:-40}
+      # The sweep re-checks the last N days by event id and refills whatever the
+      # watermark walked past anyway. It is the safety net under the lag rule.
+      - ProcessAnalyzer__GapSweepDays=${GAP_SWEEP_DAYS:-3}
+      # Startup refuses a source login that can write. Set to true only to run against a
+      # throwaway local copy of the source where no read-only login exists.
+      - ProcessAnalyzer__AllowWriteCapableLogin=${ALLOW_WRITE_CAPABLE_LOGIN:-false}
+      # Must match the timezone the journal's local-time columns were written in,
+      # otherwise wall-clock reporting is shifted. Override via .env.
+      - TZ=${TZ:-Europe/Berlin}
+      - PROCESSANALYZER_ARTIFACTS=/artifacts
+      # Names instead of pseudonyms. Off by default; an installation that has not decided must not show them by
+      # accident. On, "who approves whose leave" becomes answerable — a pseudonym cannot answer it.
+      - ProcessAnalyzer__ShowActorIdentity=${SHOW_ACTOR_IDENTITY:-false}
+      # Was missing here while .env.template asked for it, so every container ran on the fallback key that is
+      # written in the source — which makes a pseudonym reversible by anyone holding a list of user ids.
+      - ProcessAnalyzer__ActorHashKey=${ACTOR_HASH_KEY:-}
+      - ProcessAnalyzer__RequireLogin=${REQUIRE_LOGIN:-true}
+      - ProcessAnalyzer__DashboardPasswordHash=${DASHBOARD_PASSWORD_HASH:-}
+      - ProcessAnalyzer__VocabularyPath=/vocabulary
+    volumes:
+      # Both sides see the same directory: the app writes the OCEL export into it and reads the diagrams back out,
+      # the miner does the opposite. Mounting it only into the miner leaves the app serving 404 for every model.
+      - ${PROCESSANALYZER_ARTIFACTS:-./artifacts}:/artifacts
+      # What the screens say. Read-only and read at startup, so a corrected word needs a restart and not a release.
+      # Defaults to the committed example: without it every step renders as a dotted identifier behind a ⚠, which
+      # looks like a broken tool rather than a missing mount.
+      - ${PROCESSANALYZER_VOCABULARY:-./vocabulary.example}:/vocabulary:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5100/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # The miner runs apart from the application: pm4py is AGPL-3.0 and pulls in a scientific stack, and a mining run
+  # that takes minutes must never stall the pull loop. It publishes no ports and is never reachable from outside.
+  # Run it on demand: docker compose --profile mining run --rm miner
+  miner:
+    image: ${PROCESSANALYZER_MINER_IMAGE:-ghcr.io/codingsteve01/processanalyzer-miner:latest}
+    build: ./miner
+    profiles: ["mining"]
+    volumes:
+      # A shared directory, not an HTTP call: both sides restart independently, and a file that is already there
+      # survives either of them going away mid-run.
+      - ${PROCESSANALYZER_ARTIFACTS:-./artifacts}:/artifacts
+    mem_limit: 4g
+
+volumes:
+  postgres_data:

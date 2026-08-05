@@ -1,0 +1,506 @@
+/* Process Analyzer — single page, single stylesheet.
+   Design tokens are defined once in :root (STYLE_GUIDE.md): dark base, light override.
+   Never hardcode a color or a radius below — always var(--token). */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-hover: #21262d;
+  --bg-active: #30363d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-dim: rgba(88, 166, 255, 0.15);
+  --error: #f85149;
+  --error-dim: rgba(248, 81, 73, 0.15);
+  --warning: #d29922;
+  --warning-dim: rgba(210, 153, 34, 0.15);
+  --success: #3fb950;
+  --success-dim: rgba(63, 185, 80, 0.15);
+  --info: #58a6ff;
+
+  --topbar-height: 56px;
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --bg: #ffffff;
+    --bg-card: #f6f8fa;
+    --bg-hover: #eaeef2;
+    --bg-active: #d0d7de;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-muted: #656d76;
+    --accent: #0969da;
+    --accent-dim: rgba(9, 105, 218, 0.1);
+    --error: #cf222e;
+    --error-dim: rgba(207, 34, 46, 0.1);
+    --warning: #d29922;
+    --warning-dim: rgba(154, 103, 0, 0.1);
+    --success: #1a7f37;
+    --success-dim: rgba(26, 127, 55, 0.1);
+    --info: #0969da;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ===== Topbar ===== */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--topbar-height);
+  padding: 0 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.brand-accent {
+  color: var(--accent);
+}
+
+.topbar-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ===== Layout ===== */
+.main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.stat-card.wide {
+  grid-column: 1 / -1;
+}
+
+.stat-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+/* No data is not the same as zero — unknown values render dimmed so the page never
+   presents a missing counter as a measured one. */
+.metric-value.unknown,
+.detail-row dd.unknown {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.metric-value.attention {
+  color: var(--warning);
+}
+
+.metric-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ===== Status pill ===== */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.status-pill.ok {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.status-pill.warning {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.status-pill.critical {
+  background: var(--error-dim);
+  color: var(--error);
+}
+
+.status-pill.loading {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+/* ===== Banner ===== */
+.banner {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.banner.warning {
+  background: var(--warning-dim);
+  border-color: var(--warning);
+  color: var(--text);
+}
+
+.banner.critical {
+  background: var(--error-dim);
+  border-color: var(--error);
+  color: var(--text);
+}
+
+/* ===== Detail list ===== */
+.detail-list {
+  margin: 0 0 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.detail-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-row dt {
+  width: 180px;
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.detail-row dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.detail-row dd.error-text {
+  color: var(--error);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* ===== Buttons ===== */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-primary,
+.btn-secondary {
+  border-radius: var(--radius);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.btn-secondary:hover,
+.btn-icon:hover {
+  background: var(--bg-hover);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== Footer ===== */
+.foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* --- analysis page ------------------------------------------------------------------------------------------ */
+
+.panel { margin-top: 24px; }
+
+.panel-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.scope { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.875rem; }
+
+.scope select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font: inherit;
+}
+
+/* Every caveat on this page states a limit of the data, not a disclaimer. They are part of the answer. */
+.caveat {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 8px 0 12px;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+
+table.data { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin-bottom: 16px; }
+table.data th, table.data td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+table.data th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data tbody tr:hover { background: var(--bg-card); }
+
+.variant { display: inline-block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
+.empty { color: var(--text-muted); font-size: 0.875rem; margin-bottom: 16px; }
+
+/* A computed sentence, not a caption: it states what the numbers below amount to. */
+.reading {
+  color: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  background: var(--accent-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 12px 16px;
+  margin: 8px 0 16px;
+}
+
+.model-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+.model-tab {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.model-tab:hover { background: var(--bg-hover); color: var(--text); }
+.model-tab.active { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+
+/* Graphviz output is far wider than any screen; it scrolls inside its own box instead of stretching the page. */
+.model-view {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  max-height: 70vh;
+  padding: 8px;
+}
+
+.model-view object { display: block; min-width: 100%; }
+
+/* --- view navigation ----------------------------------------------------------------------------------------- */
+
+.viewnav {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 5;
+}
+
+.viewtab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.viewtab:hover { color: var(--text); background: var(--bg-hover); }
+.viewtab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.viewtab-title { font-weight: 600; font-size: 0.9375rem; }
+
+/* The subtitle is the actual navigation aid: a tab called "Menschen" says nothing, "Wer entscheidet was" does. */
+.viewtab-sub { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+.viewtab.active .viewtab-sub { color: var(--accent); }
+
+.view > h3:first-of-type { margin-top: 0; }
+.panel.view h3 { margin-top: 32px; }
+.panel.view h3:first-of-type { margin-top: 16px; }
+
+/* --- login ------------------------------------------------------------------------------------------------- */
+
+.login-body { display: grid; place-items: center; min-height: 100vh; background: var(--bg); }
+
+.login-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  width: min(400px, calc(100vw - 32px));
+}
+
+.login-card h1 { margin: 0 0 8px; font-size: 1.5rem; }
+
+.login-hint { color: var(--text-muted); font-size: 0.875rem; line-height: 1.5; margin: 0 0 24px; }
+
+.login-label { display: block; font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 6px; }
+
+.login-input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font: inherit;
+  margin-bottom: 16px;
+}
+
+.login-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.login-submit { width: 100%; }
+
+.login-error { color: var(--error); font-size: 0.875rem; margin: 12px 0 0; }
+
+/* --- cases and trend ----------------------------------------------------------------------------------------- */
+
+.chart-box { height: 320px; margin-bottom: 24px; }
+
+/* Two columns on a wide screen, stacked on a narrow one: the list is a means to the timeline, not a screen of
+   its own, and side by side is what makes clicking through cases quick. */
+.case-layout { display: grid; grid-template-columns: minmax(320px, 2fr) 3fr; gap: 24px; align-items: start; }
+
+@media (max-width: 1100px) {
+  .case-layout { grid-template-columns: 1fr; }
+}
+
+.case-layout tbody tr { cursor: pointer; }
+.case-layout tbody tr.selected { background: var(--accent-dim); }
+
+.case-search { width: 180px; margin-bottom: 0; padding: 6px 10px; }
+
+/* The trend chart. Drawn here rather than by a library, so the page keeps working without a route to the internet. */
+#trendChart { width: 100%; height: 100%; }
+#trendChart .axis { stroke: var(--border); stroke-width: 1; }
+#trendChart .grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.6; }
+#trendChart .tick { fill: var(--text-muted); font-size: 11px; }
+#trendChart .series { fill: none; stroke-width: 2; }
+
+.legend { display: flex; gap: 16px; margin: -12px 0 20px; font-size: 0.8125rem; color: var(--text-muted); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* The period control in the header. Inline so the window is visible from every view rather than hidden in one panel. */
+.periodbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.periodbar input[type='date'] {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.2rem 0.4rem;
+  font: inherit;
+}

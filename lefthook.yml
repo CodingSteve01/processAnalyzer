@@ -1,0 +1,23 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: eslint
+      glob: "*.js"
+      run: npx eslint {staged_files}
+
+    - name: csharpier
+      glob: "*.cs"
+      env:
+        DOTNET_ROOT: /usr/local/share/dotnet
+      run: bash scripts/csharpier.sh {staged_files}
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx commitlint --edit {1}
+
+pre-push:
+  jobs:
+    - name: actionlint
+      glob: ".github/workflows/*.yml"
+      run: actionlint {push_files}

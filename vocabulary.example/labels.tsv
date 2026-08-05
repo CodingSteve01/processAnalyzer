@@ -1,0 +1,67 @@
+# Example labels: kind<TAB>type_name<TAB>label_de<TAB>hint_de
+#
+# Invented words for the invented types in source-catalogue.example.txt. They keep the label rules under test and let
+# the demo stack render without an installation's own labels.tsv.
+#
+# kind is one of:
+#   object         what a case is about. Plural, because every screen counts them
+#   event          a named fact. A completed fact in the past tense
+#   entity, verb   the generic tier: one noun per entity, one word per verb, so an entity added later renders from
+#                  one row instead of four
+#   discriminator  the attribute that names the step — which role decided, which action ran, how it was decided
+#
+# Rules that hold for a real labels.tsv too:
+#   * Business vocabulary, not table names.
+#   * Where two types differ only by who acted, the label names the stage, never a job title the data does not
+#     guarantee. The case view says who it actually was.
+#   * Activities are singular: one thing happened once.
+#   * The hint explains the step to somebody who has never seen the process, or is empty when the label is already
+#     the whole story. A hint that restates the label is noise.
+#   * Two event types must never share a label: that merges two steps into one line on every screen.
+object	document	Belege	Eingehende und ausgehende Dokumente
+object	workflow	Beleg-Workflows	Automatische Abläufe, die auf Belegen laufen
+object	request	Anträge	
+object	user	Mitarbeiter	Personalstammdaten
+event	demo.document.uploaded.v1	Beleg eingegangen	Ein Dokument ist ins System gekommen
+event	demo.document.classification-resolved.v1	Beleg zugeordnet	Belegart und Empfänger wurden bestimmt
+event	demo.document.classification-unresolved.v1	Beleg nicht zuzuordnen	Die Erkennung hat nichts gefunden
+event	demo.document.release-granted.v1	Freigabe erteilt	Eine Rolle hat den Beleg freigegeben
+event	demo.document.release-discarded.v1	Freigabe verweigert	Der Beleg geht zurück an die Bearbeitung
+event	demo.document.release-reset.v1	Freigabe zurückgenommen	
+event	demo.document.email-sent.v1	Beleg per Mail rausgegangen	
+event	demo.document.archived.v1	Beleg archiviert	
+event	demo.request.submitted.v1	Antrag gestellt	
+event	demo.request.approved.v1	Antrag genehmigt	
+event	demo.request.rejected.v1	Antrag abgelehnt	
+event	demo.workflow-run.queued.v1	Workflow eingereiht	
+event	demo.workflow-run.completed.v1	Workflow gelaufen	Der automatische Ablauf hat den Beleg verarbeitet
+event	demo.workflow-run.failed.v1	Workflow fehlgeschlagen	
+event	demo.workflow-action.executed.v1	Workflow-Schritt ausgeführt	Eine einzelne Aktion des Ablaufs
+entity	document	Beleg	
+entity	request	Antrag	
+entity	workflow	Workflow	
+verb	created	angelegt	
+verb	updated	geändert	
+verb	deleted	gelöscht	
+verb	copied	kopiert	
+discriminator	Editor	Bearbeitung	
+discriminator	Accounting	Buchhaltung	
+discriminator	Management	Geschäftsleitung	
+discriminator	SendDocumentEmail	Mailversand	
+discriminator	ChangeStatus	Statuswechsel	
+discriminator	template	automatisch	
+discriminator	manual	von Hand	
+object	entry	Buchungen	Gebuchte Einträge, die aus einem Antrag entstanden sind
+object	delivery	Meldungen	An einen externen Dienst gemeldete Lieferungen
+object	address	Adressen	Adress- und Partnerstammdaten
+event	demo.document.classification-corrected.v1	Zuordnung korrigiert	Jemand hat die erkannte Belegart überschrieben
+event	demo.document.status-changed.v1	Status gewechselt	
+event	demo.entry.released.v1	Buchung freigegeben	Aus dem Antrag ist ein gebuchter Eintrag geworden
+event	demo.delivery.reported.v1	Lieferung gemeldet	Meldeversuch an den externen Dienst
+event	demo.address.received-from-external.v1	Adresse übernommen	Ein Fremdsystem führt die Adressstammdaten
+event	demo.address-sync.completed.v1	Adressabgleich gelaufen	
+event	demo.employee.received-from-external.v1	Mitarbeiter übernommen	Ein Fremdsystem führt die Personalstammdaten
+event	demo.employee-roster.received.v1	Personalabgleich gelaufen	
+discriminator	InvoiceVerification	Rechnungsprüfung	
+discriminator	MoveDocumentToStack	Ablage im Stapel	
+discriminator	Report	Meldung	

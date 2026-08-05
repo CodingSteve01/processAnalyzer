@@ -1,0 +1,66 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Database files - NEVER commit these
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Data directory runtime files
+ProcessAnalyzer.Web/data/*.json
+
+# Environment files
+.env
+.env.*
+# The two files that carry the SHAPE of the configuration and no value. Everything else matching .env.* is a real
+# environment file and stays out — git status does not list what it ignores, so a missing exception here looks
+# exactly like a file nobody wrote.
+!.env.example
+!.env.template
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+# An installation's vocabulary: labels, the payload allowlist, the discriminator rules and the type catalogue.
+# Configuration on the host — read at startup and corrected without a release — so it is not part of a build.
+# vocabulary.example/ is committed and has the same four file names, which is what keeps the loader free of any
+# "own file or example" branching: it reads the directory it is pointed at.
+/vocabulary/
+
+# Node
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+*.log
+logs/
+*.csv
+
+# OCEL exports and mining artifacts (phase 4/5) - regenerated, never committed
+*.sqlite
+*.parquet
+artifacts/
+exchange/
+
+# JetBrains
+.idea/

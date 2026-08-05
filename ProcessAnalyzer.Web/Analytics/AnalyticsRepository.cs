@@ -1,0 +1,402 @@
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using ProcessAnalyzer.Web.Data;
+
+namespace ProcessAnalyzer.Web.Analytics;
+
+/// <summary>
+/// Every question the dashboard asks, as SQL against the analytics spine.
+/// <para>
+/// Raw SQL, not LINQ: these are percentiles, window functions and entropy over a materialized view. Expressing
+/// them through EF would obscure what is actually computed, and the computation is the product.
+/// </para>
+/// <para>
+/// <b>Nothing here aggregates across object types.</b> An event that touches five objects counts five times when
+/// the log is flattened (convergence), and events of unrelated objects look sequential (divergence). A cross-type
+/// sum is therefore not a coarse answer, it is a wrong one — so <c>objectType</c> is required, not optional.
+/// </para>
+/// </summary>
+public sealed class AnalyticsRepository
+{
+    private readonly IDbContextFactory<AppDbContext> _factory;
+
+    public AnalyticsRepository(IDbContextFactory<AppDbContext> factory) => _factory = factory;
+
+    /// <summary>What is in the log at all: which object types exist, how much of each, and over what period.</summary>
+    public Task<List<Dictionary<string, object?>>> InventoryAsync(CancellationToken ct) =>
+        QueryAsync(
+            """
+            SELECT o.type AS object_type,
+                   analytics.label_object(o.type) AS bezeichnung,
+                   count(DISTINCT o.id)                AS objects,
+                   count(r.event_id)                   AS events,
+                   count(DISTINCT e.type)              AS activities,
+                   min(e.ts)                           AS first_seen,
+                   max(e.ts)                           AS last_seen
+            FROM ocel.object o
+            LEFT JOIN ocel.e2o r ON r.object_id = o.id
+            LEFT JOIN ocel.event e ON e.id = r.event_id
+            GROUP BY 1
+            ORDER BY events DESC
+            """,
+            ct
+        );
+
+    /// <summary>Which activities an object type actually goes through, and who performs them.</summary>
+    public Task<List<Dictionary<string, object?>>> ActivitiesAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT analytics.label_activity(event_type) AS event_type,
+                   count(*)                                                          AS events,
+                   count(DISTINCT object_id)                                         AS objects,
+                   count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*)  AS manual_share,
+                   count(*) FILTER (WHERE seq = 1)                                   AS as_first_step
+            FROM analytics.object_timeline
+            WHERE object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+            GROUP BY 1
+            ORDER BY events DESC
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Throughput. Percentiles, never a mean: these distributions are lognormal with a fat tail, and the mean sits
+    /// where almost no case actually is. Open cases are excluded — counting them drags p95 down and makes a process
+    /// look faster the busier it gets.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> ThroughputAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT count(*)                                                              AS cases,
+                   percentile_cont(0.5)  WITHIN GROUP (ORDER BY biz_seconds)             AS p50_seconds,
+                   percentile_cont(0.8)  WITHIN GROUP (ORDER BY biz_seconds)             AS p80_seconds,
+                   percentile_cont(0.95) WITHIN GROUP (ORDER BY biz_seconds)             AS p95_seconds,
+                   max(biz_seconds)                                                      AS worst_seconds,
+                   avg(n_events)                                                         AS avg_steps,
+                   sum(wall_seconds - biz_seconds) / NULLIF(sum(wall_seconds), 0)        AS outside_hours_share
+            FROM analytics.object_lifecycle
+            WHERE object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND NOT is_open
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Where the calendar time goes, ranked by total consumed time rather than by the slowest edge. The slowest
+    /// edge is almost always a rare exception; the edge that eats the most time across the population is where the
+    /// money is.
+    /// </summary>
+    /// <remarks>
+    /// The column is elapsed time, not waiting time. A journal event carries one timestamp, so service time is not
+    /// recorded and the gap between two events contains both work and waiting. Labelling it "waiting" would be an
+    /// invention.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> TransitionsAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT analytics.label_activity(prev_type) AS from_activity,
+                   analytics.label_activity(event_type) AS to_activity,
+                   count(*) AS n,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.biz_seconds(prev_ts, ts)) AS median_seconds,
+                   sum(analytics.biz_seconds(prev_ts, ts))                                         AS total_seconds
+            FROM analytics.object_timeline
+            WHERE object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND prev_type IS NOT NULL
+            GROUP BY 1, 2
+            ORDER BY total_seconds DESC
+            LIMIT 25
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Rework: activities that happen more than once for the same object. The single most unambiguous waste signal
+    /// in an event log — nobody plans to approve the same document twice.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> ReworkAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            WITH per AS (
+                SELECT object_id, event_type, count(*) AS c
+                FROM analytics.object_timeline
+                WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                GROUP BY 1, 2
+            ),
+            total AS (
+                SELECT count(DISTINCT object_id)::numeric AS n
+                FROM analytics.object_timeline WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+            )
+            SELECT analytics.label_activity(event_type) AS event_type,
+                   count(*) FILTER (WHERE c > 1)                            AS rework_cases,
+                   count(*) FILTER (WHERE c > 1) / (SELECT n FROM total)    AS rework_rate,
+                   sum(c - 1) FILTER (WHERE c > 1)                          AS extra_executions
+            FROM per
+            GROUP BY 1
+            HAVING count(*) FILTER (WHERE c > 1) > 0
+            ORDER BY extra_executions DESC
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Cases that went wrong once: a rejection, a discard, a failed attempt.
+    /// </summary>
+    /// <remarks>
+    /// Repeat-of-the-same-activity is only one shape of rework, and in this process it is the rarer one. The common
+    /// shape is a step that exists solely because something was wrong — a discarded release, a rejected request, a
+    /// failed declaration — after which the case loops back. Those cases carry the cost, so they are counted on
+    /// their own rather than hidden inside the variant list.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> NegativeOutcomesAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            WITH flagged AS (
+                SELECT object_id, event_type
+                FROM analytics.object_timeline
+                WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND (raw_event_type LIKE '%discarded%' OR raw_event_type LIKE '%rejected%'
+                       OR attrs ->> 'status' = 'Error' OR attrs ->> 'succeeded' = 'false')
+            ),
+            total AS (SELECT count(*)::numeric AS n FROM analytics.object_lifecycle WHERE object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil))
+            SELECT analytics.label_activity(f.event_type) AS event_type,
+                   count(DISTINCT f.object_id)                             AS cases,
+                   count(DISTINCT f.object_id) / (SELECT n FROM total)     AS case_share,
+                   -- What the detour costs: those cases against the ones that never went wrong.
+                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY biz_seconds)
+                    FROM analytics.object_lifecycle l
+                    WHERE l.object_type = @objectType
+                      AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
+                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
+                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY biz_seconds)
+                    FROM analytics.object_lifecycle l
+                    WHERE l.object_type = @objectType
+                      AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
+                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
+            FROM flagged f
+            GROUP BY 1
+            ORDER BY cases DESC
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Variants: the distinct paths through the process, most frequent first. The cumulative share answers the
+    /// question that matters — how many different ways of doing this actually exist, and how much of the work runs
+    /// on the standard path.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> VariantsAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            WITH v AS (
+                SELECT object_id,
+                       string_agg(analytics.label_activity(event_type), ' → ' ORDER BY ts, event_id) AS variant,
+                       count(*) AS steps
+                FROM analytics.object_timeline
+                WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                GROUP BY object_id
+            ),
+            agg AS (
+                SELECT v.variant, count(*) AS n, avg(l.biz_seconds) AS avg_seconds
+                FROM v JOIN analytics.object_lifecycle l ON l.object_id = v.object_id
+                GROUP BY v.variant
+            )
+            SELECT variant, n, avg_seconds,
+                   n::numeric / sum(n) OVER ()                                                    AS share,
+                   sum(n) OVER (ORDER BY n DESC ROWS UNBOUNDED PRECEDING)::numeric / sum(n) OVER () AS cum_share
+            FROM agg
+            ORDER BY n DESC
+            LIMIT 20
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Automation. The headline is straight-through processing — the share of cases with no human step at all —
+    /// because a per-activity rate hides that almost every case still needs a person somewhere.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> AutomationAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT count(*)                                                             AS cases,
+                   count(*) FILTER (WHERE NOT has_human)::numeric / count(*)            AS straight_through_share,
+                   (SELECT count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*)
+                    FROM analytics.object_timeline WHERE object_type = @objectType
+                      AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                      AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil))     AS manual_event_share
+            FROM analytics.object_lifecycle
+            WHERE object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND NOT is_open
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Automation candidates: frequent, manual, and predictable. The entropy term is what separates this from a
+    /// frequency chart — a step whose next step is always the same is mechanical, while a step with many possible
+    /// outcomes is a judgement call, and automating a judgement call produces a support queue.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> AutomationCandidatesAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            WITH edges AS (
+                SELECT prev_type AS a, event_type AS b, count(*) AS n
+                FROM analytics.object_timeline
+                WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND prev_type IS NOT NULL
+                GROUP BY 1, 2
+            ),
+            p AS (
+                SELECT a, n::numeric / sum(n) OVER (PARTITION BY a) AS pr, count(*) OVER (PARTITION BY a) AS deg
+                FROM edges
+            ),
+            ent AS (
+                SELECT a, -sum(pr * ln(pr)) / NULLIF(ln(NULLIF(max(deg), 1)), 0) AS h FROM p GROUP BY a
+            ),
+            act AS (
+                SELECT event_type,
+                       count(*) AS freq,
+                       count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*) AS manual
+                FROM analytics.object_timeline WHERE object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) GROUP BY 1
+            )
+            SELECT analytics.label_activity(act.event_type) AS event_type,
+                   act.freq, act.manual, coalesce(ent.h, 0) AS outcome_entropy,
+                   act.freq * act.manual * (1 - coalesce(ent.h, 0)) AS score
+            FROM act LEFT JOIN ent ON ent.a = act.event_type
+            WHERE act.manual > 0
+            ORDER BY score DESC
+            LIMIT 15
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Who hands work to whom. Suppressed below five distinct objects per pair: this is a coordination map, not a
+    /// performance file on individuals, and a cell built from two cases would be exactly that.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> HandoversAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            -- Roles, never pseudonyms. A pseudonym forces the reader to look somebody up to understand the row, and
+            -- what the row is actually about is which part of the organisation hands work to which.
+            SELECT f.role AS from_actor, t2.role AS to_actor,
+                   count(DISTINCT t.object_id) AS cases, count(*) AS handovers
+            FROM analytics.object_timeline t
+            JOIN dim.actor_role f ON f.actor_key = t.prev_actor
+            JOIN dim.actor_role t2 ON t2.actor_key = t.actor_key
+            WHERE t.object_type = @objectType
+              AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+              AND t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
+            GROUP BY 1, 2
+            HAVING count(DISTINCT t.object_id) >= 5
+            ORDER BY handovers DESC
+            LIMIT 40
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    /// <summary>
+    /// Where cases stop. An object whose last event is not a terminal activity has either finished quietly or been
+    /// abandoned, and the difference is the single most actionable thing a process view can point at.
+    /// </summary>
+    public Task<List<Dictionary<string, object?>>> EndpointsAsync(
+        string objectType,
+        Period period,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            -- The last step is the one with the highest position, not the one with the latest timestamp: two
+            -- events of a case can share a timestamp to the millisecond, and joining on time then counts the case
+            -- twice and pushes the shares past 100%.
+            WITH last_step AS (
+                SELECT DISTINCT ON (t.object_id) t.object_id, t.event_type
+                FROM analytics.object_timeline t
+                WHERE t.object_type = @objectType
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                ORDER BY t.object_id, t.seq DESC
+            )
+            SELECT analytics.label_activity(s.event_type) AS last_activity,
+                   count(*) AS cases,
+                   count(*)::numeric / sum(count(*)) OVER () AS share,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds) AS median_seconds
+            FROM last_step s
+            JOIN analytics.object_lifecycle l ON l.object_id = s.object_id
+            GROUP BY 1
+            ORDER BY cases DESC
+            """,
+            ct,
+            [("objectType", objectType), .. period.Parameters()]
+        );
+
+    private Task<List<Dictionary<string, object?>>> QueryAsync(
+        string sql,
+        CancellationToken ct,
+        params (string Name, object Value)[] parameters
+    ) => Query.RunAsync(_factory, sql, ct, parameters);
+}

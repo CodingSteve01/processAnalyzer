@@ -1,0 +1,40 @@
+# The types a source declares, copied from its event and object type registries, plus the closed set of generic
+# entities. LabelCoverageTests asserts every line here has a German label.
+#
+# This is the example: a small, invented catalogue that exercises every shape — a named fact, a fact carrying a
+# discriminator, an object type, a generic entity. An installation replaces it with its own source-catalogue.txt and
+# refreshes that file whenever the source adds a type: the test failing is the point, because a new type must be
+# named before anybody sees it on a screen.
+entity document
+entity request
+entity workflow
+event demo.address-sync.completed.v1
+event demo.address.received-from-external.v1
+event demo.delivery.reported.v1
+event demo.document.archived.v1
+event demo.document.classification-corrected.v1
+event demo.document.classification-resolved.v1
+event demo.document.classification-unresolved.v1
+event demo.document.email-sent.v1
+event demo.document.release-discarded.v1
+event demo.document.release-granted.v1
+event demo.document.release-reset.v1
+event demo.document.status-changed.v1
+event demo.document.uploaded.v1
+event demo.employee-roster.received.v1
+event demo.employee.received-from-external.v1
+event demo.entry.released.v1
+event demo.request.approved.v1
+event demo.request.rejected.v1
+event demo.request.submitted.v1
+event demo.workflow-action.executed.v1
+event demo.workflow-run.completed.v1
+event demo.workflow-run.failed.v1
+event demo.workflow-run.queued.v1
+object address
+object delivery
+object document
+object entry
+object request
+object user
+object workflow

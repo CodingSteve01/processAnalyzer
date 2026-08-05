@@ -1,0 +1,11 @@
+# Which payload attribute names a step: priority<TAB>type_match<TAB>attr_name
+#
+# Example rules, matching source-catalogue.example.txt. Read at startup, upserted into ocel.discriminator_rule. Lowest priority wins when two rules match. type_match is a
+# LIKE pattern against the event type; '%' is a rule for every type.
+#
+# Without these, two decisions by two different roles are one activity: every multi-stage approval reads as 100 %
+# rework and the variant list collapses.
+10	%	role
+20	%	actionType
+30	demo.document.classification-%	method
+80	%	action

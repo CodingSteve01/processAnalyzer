@@ -1,0 +1,332 @@
+using Microsoft.EntityFrameworkCore;
+using ProcessAnalyzer.Web.Data;
+
+namespace ProcessAnalyzer.Web.Analytics;
+
+/// <summary>
+/// The questions somebody asks who does not yet know what the company does.
+/// <para>
+/// The rest of the analytics answers "how does this process perform". These answer the prior question — which
+/// processes are there at all, who runs them, what starts them and what comes out — and they answer it in words,
+/// with no type keys, no ids and no pseudonyms anywhere in the output.
+/// </para>
+/// </summary>
+public sealed class DiscoveryRepository
+{
+    private readonly IDbContextFactory<AppDbContext> _factory;
+
+    public DiscoveryRepository(IDbContextFactory<AppDbContext> factory) => _factory = factory;
+
+    /// <summary>
+    /// Every process found in the log, ranked by how much work runs through it, with what starts it, what ends it,
+    /// how long it takes and who is involved.
+    /// </summary>
+    /// <remarks>
+    /// One row per object type, because in an object-centric log that is what a process is: a kind of thing that has
+    /// a life. Nothing has to be configured for this to work — a new object type appears here the moment the first
+    /// fact mentions it, which is the entire reason for mining rather than modelling.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ProcessesAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH lifecycle AS (
+                SELECT l.object_type,
+                       count(*)                                                        AS cases,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds)      AS median_seconds,
+                       avg(l.n_events)                                                 AS avg_steps,
+                       count(*) FILTER (WHERE NOT l.has_human)::numeric / count(*)     AS automatic_share,
+                       min(l.first_ts)                                                 AS since
+                FROM analytics.object_lifecycle l
+                GROUP BY 1
+            ),
+            starts AS (
+                SELECT DISTINCT ON (object_type) object_type, event_type, count(*) OVER (PARTITION BY object_type, event_type) AS n
+                FROM analytics.object_timeline WHERE seq = 1
+                ORDER BY object_type, n DESC
+            ),
+            ends AS (
+                SELECT DISTINCT ON (t.object_type) t.object_type, t.event_type,
+                       count(*) OVER (PARTITION BY t.object_type, t.event_type) AS n
+                FROM (
+                    SELECT DISTINCT ON (object_id) object_id, object_type, event_type
+                    FROM analytics.object_timeline ORDER BY object_id, seq DESC
+                ) t
+                ORDER BY t.object_type, n DESC
+            ),
+            roles AS (
+                SELECT t.object_type, string_agg(DISTINCT r.role, ', ' ORDER BY r.role) AS involved
+                FROM analytics.object_timeline t
+                JOIN dim.actor_role r ON r.actor_key = t.actor_key
+                GROUP BY 1
+            )
+            SELECT analytics.label_object(l.object_type)        AS prozess,
+                   -- A type with a handful of instances but thousands of events is a configuration record that many
+                   -- cases refer to, not a case itself. Ranking it next to real processes reads as "one case that
+                   -- takes 593 hours", which is the opposite of what the data says.
+                   CASE WHEN l.cases <= 5 AND l.avg_steps > 50 THEN 'Stammdaten' ELSE 'Ablauf' END AS art,
+                   l.cases                                      AS faelle,
+                   round(l.median_seconds / 3600.0)             AS dauer_stunden,
+                   round(l.avg_steps, 1)                        AS schritte,
+                   round(l.automatic_share * 100)               AS automatisch_prozent,
+                   analytics.label_activity(s.event_type)       AS beginnt_mit,
+                   analytics.label_activity(e.event_type)       AS endet_mit,
+                   coalesce(r.involved, 'niemand — läuft vollautomatisch') AS beteiligte,
+                   l.since                                      AS seit
+            FROM lifecycle l
+            LEFT JOIN starts s ON s.object_type = l.object_type
+            LEFT JOIN ends e ON e.object_type = l.object_type
+            LEFT JOIN roles r ON r.object_type = l.object_type
+            ORDER BY l.cases DESC
+            """,
+            ct
+        );
+
+    /// <summary>
+    /// Who decides about whose work: the person who started a case, and the person who approved or released it.
+    /// </summary>
+    /// <remarks>
+    /// The question this answers — "who approves whose leave, and whose times" — is one an organisation is expected
+    /// to know and frequently does not, because the answer lives in whoever happened to click. It is a relationship,
+    /// not a performance measure: it says who depends on whom, and nothing about how well anybody works.
+    /// <para>
+    /// No k-anonymity floor here. A supervisor-to-employee relation is a pair by nature; suppressing pairs below five
+    /// cases would suppress exactly the relations the question is about, and would answer "nobody approves anything".
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> DecisionsAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH submitted AS (
+                SELECT DISTINCT ON (t.object_id) t.object_id, t.object_type, t.actor_key, t.ts
+                FROM analytics.object_timeline t
+                WHERE t.actor_kind = 'human'
+                ORDER BY t.object_id, t.seq
+            ),
+            decided AS (
+                SELECT t.object_id, t.actor_key, t.ts, t.event_type
+                FROM analytics.object_timeline t
+                WHERE t.actor_kind = 'human'
+                  AND (t.raw_event_type LIKE '%approved%' OR t.raw_event_type LIKE '%granted%'
+                       OR t.raw_event_type LIKE '%released%' OR t.raw_event_type LIKE '%rejected%'
+                       OR t.raw_event_type LIKE '%discarded%')
+            ),
+            pairs AS (
+                SELECT s.object_type,
+                       s.actor_key AS eingereicht_von,
+                       d.actor_key AS entschieden_von,
+                       d.event_type,
+                       count(*) AS wie_oft,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.biz_seconds(s.ts, d.ts)) AS wartezeit
+                FROM submitted s
+                JOIN decided d ON d.object_id = s.object_id AND d.actor_key <> s.actor_key
+                GROUP BY 1, 2, 3, 4
+            )
+            -- Ranked inside each process. Document approvals outnumber leave approvals by two orders of magnitude,
+            -- and a flat top-100 would answer "who approves invoices" a hundred times and "who approves whose leave"
+            -- never — which is the question that prompted this screen.
+            SELECT analytics.label_object(object_type)              AS worum_geht_es,
+                   analytics.person_with_role(eingereicht_von)      AS eingereicht_von,
+                   analytics.person_with_role(entschieden_von)      AS entschieden_von,
+                   analytics.label_activity(event_type)         AS entscheidung,
+                   wie_oft,
+                   round((wartezeit / 3600)::numeric, 1)        AS wartezeit_stunden
+            FROM (
+                SELECT *, row_number() OVER (PARTITION BY object_type ORDER BY wie_oft DESC, wartezeit DESC) AS rang
+                FROM pairs
+            ) ranked
+            WHERE rang <= 12
+            ORDER BY object_type, wie_oft DESC
+            """,
+            ct
+        );
+
+    /// <summary>
+    /// Who works with whom: pairs of people who touch the same case, however far apart in the flow.
+    /// </summary>
+    /// <remarks>
+    /// The handover matrix only shows direct passes. Real dependencies are wider — two people can never hand over to
+    /// each other and still be unable to finish without one another. This is the pairing that shows that.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> CollaborationAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH participants AS (
+                SELECT DISTINCT t.object_id, t.object_type, t.actor_key
+                FROM analytics.object_timeline t
+                WHERE t.actor_kind = 'human'
+            ),
+            -- Grouped on the keys, labelled afterwards. The other way round runs person_with_role over every pair
+            -- row before aggregating — four correlated lookups times a few thousand pairs, which turned a 7 ms
+            -- query into a 13 second request and blocked the whole page behind it.
+            pairs AS (
+                SELECT a.object_type, a.actor_key AS links, b.actor_key AS rechts, count(*) AS gemeinsame_faelle
+                FROM participants a
+                JOIN participants b ON b.object_id = a.object_id AND b.actor_key > a.actor_key
+                GROUP BY 1, 2, 3
+                ORDER BY 4 DESC
+                LIMIT 60
+            )
+            SELECT analytics.label_object(object_type)     AS worum_geht_es,
+                   analytics.person_with_role(links)       AS person,
+                   analytics.person_with_role(rechts)      AS zusammen_mit,
+                   gemeinsame_faelle
+            FROM pairs
+            ORDER BY gemeinsame_faelle DESC
+            """,
+            ct
+        );
+
+    /// <summary>What the durations are measured against — the calendar, in words.</summary>
+    /// <remarks>
+    /// Shown on the screen because a calendar nobody can see is a number nobody can check. Every duration in this
+    /// tool is working time, so if the calendar is wrong, every figure is wrong in the same direction and nothing
+    /// about the result looks suspicious.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> CalendarAsync(CancellationToken ct) =>
+        Query.RunAsync(_factory, "SELECT * FROM analytics.calendar_summary", ct);
+
+    /// <summary>Which groups exist, how many people are in them, and how much of the recorded work they do.</summary>
+    public Task<List<Dictionary<string, object?>>> RolesAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH work AS (
+                SELECT r.role, count(*) AS events, count(DISTINCT e.actor_key) AS active_actors
+                FROM ocel.event e
+                JOIN dim.actor_role r ON r.actor_key = e.actor_key
+                GROUP BY 1
+            ),
+            headcount AS (
+                SELECT p.role,
+                       count(*) AS members,
+                       -- Departed and blocked accounts stay in their groups forever. Counting them as present turns
+                       -- "six people do this work" into a number nobody in the department recognises.
+                       count(*) FILTER (WHERE a.is_active) AS members_present
+                FROM dim.actor_primary_role p
+                JOIN dim.actor a ON a.actor_key = p.actor_key
+                GROUP BY 1
+            )
+            SELECT w.role                                             AS rolle,
+                   coalesce(h.members_present, 0)                      AS personen,
+                   coalesce(h.members, 0) - coalesce(h.members_present, 0) AS ausgeschieden,
+                   w.active_actors                                    AS davon_aktiv,
+                   w.events                                           AS schritte,
+                   round(w.events::numeric / sum(w.events) OVER () * 100, 1) AS anteil_prozent
+            FROM work w
+            LEFT JOIN headcount h ON h.role = w.role
+            ORDER BY w.events DESC
+            """,
+            ct
+        );
+
+    /// <summary>Who does what: every step, and the role that performs it most.</summary>
+    /// <remarks>
+    /// This is the answer to "which workflows are executed by which people" — at the level of the group, which is
+    /// both the useful level and the only one this system reports at.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> WhoDoesWhatAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH per_role AS (
+                SELECT t.event_type, r.role, count(*) AS events, count(DISTINCT t.object_id) AS cases
+                FROM analytics.object_timeline t
+                JOIN dim.actor_role r ON r.actor_key = t.actor_key
+                GROUP BY 1, 2
+            ),
+            totals AS (SELECT event_type, sum(events) AS total FROM per_role GROUP BY 1)
+            SELECT analytics.label_activity(p.event_type)                       AS schritt,
+                   p.role                                                       AS wer,
+                   p.events                                                     AS wie_oft,
+                   round(p.events::numeric / t.total * 100)                     AS anteil_am_schritt,
+                   -- More than one role doing the same step is either a shared responsibility or an unclear one,
+                   -- and the difference is worth a look either way.
+                   (SELECT count(*) FROM per_role q WHERE q.event_type = p.event_type) AS rollen_am_schritt
+            FROM per_role p
+            JOIN totals t ON t.event_type = p.event_type
+            ORDER BY t.total DESC, p.events DESC
+            """,
+            ct
+        );
+
+    /// <summary>
+    /// What comes in and what goes out: the facts where something crosses the company boundary.
+    /// </summary>
+    /// <remarks>
+    /// Handovers are the events that make a process start or finish somewhere else — data arriving from a leading
+    /// system, a document leaving by mail, a declaration to an authority. They are the outline of the company's
+    /// dealings with the outside, and they are recorded precisely because a read is not one.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> HandoversAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT CASE
+                       WHEN e.type LIKE '%received%' THEN 'kommt rein'
+                       ELSE 'geht raus'
+                   END                                            AS richtung,
+                   analytics.label_activity(analytics.activity_of(e.type, e.attrs)) AS vorgang,
+                   count(*)                                       AS anzahl,
+                   count(DISTINCT date_trunc('day', e.ts))        AS an_tagen,
+                   coalesce(r.role, 'Automatischer Job')          AS ausgeloest_von,
+                   max(e.ts)                                      AS zuletzt
+            FROM ocel.event e
+            LEFT JOIN dim.actor_role r ON r.actor_key = e.actor_key
+            WHERE e.type LIKE '%received%'
+               OR e.type LIKE '%email-sent%'
+               OR e.type LIKE '%handed-over%'
+               OR e.type LIKE '%reported%'
+               OR e.type LIKE '%requested%'
+            GROUP BY 1, 2, 5
+            ORDER BY anzahl DESC
+            """,
+            ct
+        );
+
+    /// <summary>Who hands work to whom, between groups rather than between people.</summary>
+    public Task<List<Dictionary<string, object?>>> RoleHandoverMatrixAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT f.role                        AS von,
+                   t2.role                       AS an,
+                   count(DISTINCT t.object_id)   AS faelle,
+                   count(*)                      AS uebergaben
+            FROM analytics.object_timeline t
+            JOIN dim.actor_role f ON f.actor_key = t.prev_actor
+            JOIN dim.actor_role t2 ON t2.actor_key = t.actor_key
+            WHERE t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
+            GROUP BY 1, 2
+            HAVING count(DISTINCT t.object_id) >= 5
+            ORDER BY uebergaben DESC
+            LIMIT 40
+            """,
+            ct
+        );
+
+    /// <summary>
+    /// Event types that were registered in the source but never observed, and types observed but never labelled.
+    /// </summary>
+    /// <remarks>
+    /// The honest counterpart to every other screen. A clean-looking model can mean "the process is simple" or "we
+    /// only instrumented three steps of it", and only this list tells them apart.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> CoverageAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT r.type_name                                                  AS technischer_typ,
+                   coalesce(l.label_de, '— noch nicht benannt —')               AS bezeichnung,
+                   r.event_count                                                AS beobachtet,
+                   r.first_seen                                                 AS erstmals
+            FROM ocel.type_registry r
+            LEFT JOIN ocel.label l ON l.kind = r.kind AND l.type_name = r.type_name
+            WHERE r.kind = 'event'
+            ORDER BY (l.label_de IS NULL) DESC, r.event_count DESC
+            """,
+            ct
+        );
+}

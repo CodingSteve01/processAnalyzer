@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dotnet:
+    name: Build (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore ProcessAnalyzer.Web/ProcessAnalyzer.Web.csproj
+      - run: dotnet build ProcessAnalyzer.Web/ProcessAnalyzer.Web.csproj --no-restore -c Release
+
+  test:
+    name: Test (.NET)
+    needs: build-dotnet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      # The pull tests run against a real Postgres via Testcontainers — the watermark
+      # rule depends on ON CONFLICT and jsonb, which an in-memory provider fakes away.
+      # ubuntu-latest ships a usable Docker daemon, so no extra service block is needed.
+      - run: dotnet test ProcessAnalyzer.Tests --configuration Release --verbosity normal
+
+  eslint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx eslint ProcessAnalyzer.Web/wwwroot/**/*.js
+
+  csharpier:
+    name: CSharpier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet tool install -g csharpier
+      - run: csharpier check ProcessAnalyzer.Web/
+
+  guards:
+    name: Guard-Skripte
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A guard that has gone blind reports success forever. Its self-test runs in CI for the same reason the
+      # guard exists.
+      - run: ./scripts/test-apply-secrets.sh
+
+  actionlint:
+    name: Actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: raven-actions/actionlint@v2
+
+  commitlint:
+    name: Commitlint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}

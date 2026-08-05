@@ -1,0 +1,17 @@
+# Example payload allowlist: event_type<TAB>attr_name
+#
+# Default deny — an attribute not listed here stays in journal.payload and never reaches the analytical model, which
+# is what keeps that model widely readable. Replaced by payload-allowlist.tsv.
+demo.document.classification-resolved.v1	method
+demo.document.classification-unresolved.v1	method
+demo.document.release-granted.v1	role
+demo.document.release-granted.v1	isReRelease
+demo.document.release-discarded.v1	role
+demo.document.release-discarded.v1	reason
+demo.document.email-sent.v1	succeeded
+demo.workflow-action.executed.v1	actionType
+demo.workflow-run.completed.v1	attempt
+demo.request.approved.v1	selfApproved
+demo.delivery.reported.v1	action
+demo.delivery.reported.v1	status
+demo.document.classification-corrected.v1	method
