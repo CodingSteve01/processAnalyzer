@@ -46,6 +46,10 @@
       <span class="viewtab-title">Diagramme</span>
       <span class="viewtab-sub">Der Ablauf als Bild</span>
     </button>
+    <button type="button" class="viewtab" data-view="benennen">
+      <span class="viewtab-title">Benennen</span>
+      <span class="viewtab-sub">Wie heißt das im Haus?</span>
+    </button>
     <button type="button" class="viewtab" data-view="spiegel">
       <span class="viewtab-title">Datenstand</span>
       <span class="viewtab-sub">Woher die Zahlen kommen</span>
@@ -280,6 +284,31 @@
         <span class="hint">Ziehen verschiebt das Bild, Strg + Mausrad zoomt.</span>
       </div>
       <div class="model-view" id="modelView"></div>
+    </section>
+
+    <!-- ========================= Benennen ========================= -->
+    <section class="panel view" data-view="benennen" hidden aria-label="Benennen">
+      <div class="panel-head">
+        <h2>Wie heißt das im Haus?</h2>
+        <span class="spacer"></span>
+        <span class="hint" id="namingSummary"></span>
+        <button class="btn-secondary" id="namingExport" type="button">Als Datei herunterladen</button>
+      </div>
+      <p class="caveat">
+        Jeder Begriff auf jedem Bildschirm kommt aus dieser Liste. Was hier benannt wird, gilt sofort und überlebt
+        einen Neustart; das mitgelieferte Vokabular überschreibt es nicht mehr. Der Download ist dieselbe Datei, aus der
+        das Vokabular gelesen wird, damit die Wörter zurück in die Auslieferung wandern können.
+      </p>
+
+      <h3>Was noch keinen Namen hat</h3>
+      <p class="caveat">
+        Nach Häufigkeit sortiert, also in der Reihenfolge, in der Benennen etwas bringt. Ein unbenannter Schritt ist
+        auch ein unerklärter, und genau daran scheitert das Lesen eines Ablaufs.
+      </p>
+      <div id="namingGaps"></div>
+
+      <h3>Hier benannt statt aus dem Vokabular</h3>
+      <div id="namingOverrides"></div>
     </section>
 
     <!-- ========================= Datenstand ========================= -->

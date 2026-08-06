@@ -360,14 +360,19 @@ public sealed class DiscoveryRepository
         Query.RunAsync(
             _factory,
             """
+            -- Rendered through the same rule every screen uses, not through a raw join on event labels.
+            --
+            -- Two thirds of the types are the generic tier, which is named by rule from an entity noun plus a verb and
+            -- has no event label by design. Joining on 'event' alone reported all of them as "not yet named" while they
+            -- read as proper German everywhere else, and that turns the one honest page in the tool into the one that
+            -- cries wolf. A type is unnamed here when the rule cannot name it either — the marker does that.
             SELECT r.type_name                                                  AS technischer_typ,
-                   coalesce(l.label_de, '— noch nicht benannt —')               AS bezeichnung,
+                   analytics.label_activity(r.type_name)                        AS bezeichnung,
                    r.event_count                                                AS beobachtet,
                    r.first_seen                                                 AS erstmals
             FROM ocel.type_registry r
-            LEFT JOIN ocel.label l ON l.kind = r.kind AND l.type_name = r.type_name
             WHERE r.kind = 'event'
-            ORDER BY (l.label_de IS NULL) DESC, r.event_count DESC
+            ORDER BY (analytics.label_activity(r.type_name) LIKE '⚠%') DESC, r.event_count DESC
             """,
             ct
         );

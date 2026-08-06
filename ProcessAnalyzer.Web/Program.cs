@@ -193,6 +193,7 @@ app.MapHealthEndpoints();
 app.MapSyncEndpoints();
 app.MapAnalyticsEndpoints();
 app.MapMiningEndpoints();
+app.MapVocabularyEndpoints();
 
 app.Run();
 return 0;

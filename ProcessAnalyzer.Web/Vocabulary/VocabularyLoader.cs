@@ -114,10 +114,18 @@ public sealed class VocabularyLoader
         {
             await using var command = new NpgsqlCommand(
                 """
-                INSERT INTO ocel.label (kind, type_name, label_de, hint_de)
-                VALUES (@kind, @type, @label, @hint)
+                -- The file value is always remembered, even when a person has overridden the name here: it is what
+                -- "back to the vocabulary" restores, and it lets a reader see that this name was changed in the tool.
+                --
+                -- The visible label is only overwritten for rows the file owns. Overwriting a typed correction on every
+                -- restart would undo somebody's work silently, and nobody would connect the restart to the lost word.
+                INSERT INTO ocel.label (kind, type_name, label_de, hint_de, source, file_label_de, file_hint_de)
+                VALUES (@kind, @type, @label, @hint, 'file', @label, @hint)
                 ON CONFLICT (kind, type_name) DO UPDATE
-                    SET label_de = EXCLUDED.label_de, hint_de = EXCLUDED.hint_de
+                    SET label_de = CASE WHEN ocel.label.source = 'file' THEN EXCLUDED.label_de ELSE ocel.label.label_de END,
+                        hint_de  = CASE WHEN ocel.label.source = 'file' THEN EXCLUDED.hint_de  ELSE ocel.label.hint_de  END,
+                        file_label_de = EXCLUDED.label_de,
+                        file_hint_de  = EXCLUDED.hint_de
                 """,
                 connection
             );
