@@ -589,3 +589,26 @@ table.data tbody tr:hover { background: var(--bg-card); }
   padding: 0.2rem 0.4rem;
   font: inherit;
 }
+
+/* --- naming ---------------------------------------------------------------------------------------------------- */
+
+.naming-input {
+  width: 100%;
+  min-width: 14ch;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font: inherit;
+}
+
+.naming-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* A row that could not be saved keeps what was typed and says so, rather than clearing the field and looking done. */
+.naming-failed .naming-input {
+  border-color: var(--error);
+}

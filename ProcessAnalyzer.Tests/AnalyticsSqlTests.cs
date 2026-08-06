@@ -132,6 +132,63 @@ public sealed class AnalyticsSqlTests
     }
 
     [Fact]
+    public async Task VocabularyLoad_DoesNotOverwriteANameTypedInTheTool()
+    {
+        // A person named this type in the tool. The next startup reads the vocabulary file again, which carries the old
+        // word — and silently restoring it would undo somebody's work with nothing on screen to connect the two.
+        await ExecuteAsync(
+            "INSERT INTO ocel.label (kind, type_name, label_de, source, file_label_de) "
+                + "VALUES ('event', 'test.named.here.v1', 'Im Werkzeug benannt', 'ui', 'Aus der Datei') "
+                + "ON CONFLICT (kind, type_name) DO UPDATE SET label_de = EXCLUDED.label_de, source = 'ui'"
+        );
+
+        await LoadLabelFromFileAsync("test.named.here.v1", "Aus der Datei, neu");
+
+        var label = await TextAsync(
+            "SELECT label_de FROM ocel.label WHERE kind = 'event' AND type_name = 'test.named.here.v1'"
+        );
+        var fromFile = await TextAsync(
+            "SELECT file_label_de FROM ocel.label WHERE kind = 'event' AND type_name = 'test.named.here.v1'"
+        );
+
+        await ExecuteAsync("DELETE FROM ocel.label WHERE type_name = 'test.named.here.v1'");
+
+        Assert.Equal("Im Werkzeug benannt", label);
+        // The file value is still tracked, because that is what "back to the vocabulary" restores.
+        Assert.Equal("Aus der Datei, neu", fromFile);
+    }
+
+    [Fact]
+    public async Task VocabularyLoad_OverwritesWhatTheFileOwns()
+    {
+        await LoadLabelFromFileAsync("test.owned.by.file.v1", "Erste Fassung");
+        await LoadLabelFromFileAsync("test.owned.by.file.v1", "Korrigierte Fassung");
+
+        var label = await TextAsync(
+            "SELECT label_de FROM ocel.label WHERE kind = 'event' AND type_name = 'test.owned.by.file.v1'"
+        );
+
+        await ExecuteAsync("DELETE FROM ocel.label WHERE type_name = 'test.owned.by.file.v1'");
+
+        // A corrected word in the vocabulary still arrives — the protection is for typed names, not against the file.
+        Assert.Equal("Korrigierte Fassung", label);
+    }
+
+    /// <summary>The upsert the vocabulary loader issues per row, so this test breaks when that statement changes.</summary>
+    private Task LoadLabelFromFileAsync(string typeName, string label) =>
+        ExecuteAsync(
+            $"""
+            INSERT INTO ocel.label (kind, type_name, label_de, hint_de, source, file_label_de, file_hint_de)
+            VALUES ('event', '{typeName}', '{label}', NULL, 'file', '{label}', NULL)
+            ON CONFLICT (kind, type_name) DO UPDATE
+                SET label_de = CASE WHEN ocel.label.source = 'file' THEN EXCLUDED.label_de ELSE ocel.label.label_de END,
+                    hint_de  = CASE WHEN ocel.label.source = 'file' THEN EXCLUDED.hint_de  ELSE ocel.label.hint_de  END,
+                    file_label_de = EXCLUDED.label_de,
+                    file_hint_de  = EXCLUDED.hint_de
+            """
+        );
+
+    [Fact]
     public async Task Identity_IsOffUnlessTheSettingSaysOtherwise()
     {
         await ExecuteAsync("UPDATE analytics.setting SET value = 'false' WHERE key = 'show_actor_identity'");

@@ -6,6 +6,7 @@ import { periodQuery, periodLabel, initPeriod, scopeQuery } from './period.js';
 import { $, escape } from './utils.js';
 import * as readings from './readings.js';
 import { renderCases, renderTrend, initCases } from './cases.js';
+import { renderNaming, initNaming } from './naming.js';
 
 const nf = new Intl.NumberFormat('de-DE');
 const pf = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 });
@@ -490,6 +491,9 @@ function initModelViewer() {
 export async function renderInsights() {
   await renderOverview();
   await renderInventory();
+  // Naming is independent of the chosen process, and it must render even when there is no process yet: a fresh
+  // installation is exactly the moment the list of unnamed types is longest.
+  await renderNaming();
   if (!objectType) return;
 
   $('scopeLabel').textContent = $('objectTypeSelect').selectedOptions[0]?.textContent ?? objectType;
@@ -523,6 +527,7 @@ export function initInsights() {
   initCases(() => renderCases($('objectTypeSelect').value));
 
   initModelViewer();
+  initNaming();
 
   $('objectTypeSelect').addEventListener('change', (event) => {
     objectType = event.target.value;
