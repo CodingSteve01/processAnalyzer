@@ -74,6 +74,9 @@ public sealed class AnalyticsRepository
         QueryAsync(
             """
             SELECT analytics.label_activity(event_type) AS event_type,
+                   -- The technical key alongside the label: a screen shows the label, and a click has to send back
+                   -- something the next query can filter on.
+                   event_type                                                        AS event_type_key,
                    count(*)                                                          AS events,
                    count(DISTINCT object_id)                                         AS objects,
                    count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0)  AS manual_share,
@@ -83,7 +86,7 @@ public sealed class AnalyticsRepository
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
               AND analytics.case_touched_by_group(object_id, @scopeGroup)
-            GROUP BY 1
+            GROUP BY 1, 2
             ORDER BY events DESC
             """,
             ct,
@@ -138,6 +141,8 @@ public sealed class AnalyticsRepository
             """
             SELECT analytics.label_activity(prev_type) AS from_activity,
                    analytics.label_activity(event_type) AS to_activity,
+                   prev_type                            AS from_activity_key,
+                   event_type                           AS to_activity_key,
                    count(*) AS n,
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.biz_seconds(prev_ts, ts)) AS median_seconds,
                    sum(analytics.biz_seconds(prev_ts, ts))                                         AS total_seconds
@@ -146,7 +151,7 @@ public sealed class AnalyticsRepository
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
               AND analytics.case_touched_by_group(object_id, @scopeGroup) AND prev_type IS NOT NULL
-            GROUP BY 1, 2
+            GROUP BY 1, 2, 3, 4
             ORDER BY total_seconds DESC
             LIMIT 25
             """,
@@ -178,11 +183,12 @@ public sealed class AnalyticsRepository
                   AND analytics.case_touched_by_group(object_id, @scopeGroup)
             )
             SELECT analytics.label_activity(event_type) AS event_type,
+                   event_type                                               AS event_type_key,
                    count(*) FILTER (WHERE c > 1)                            AS rework_cases,
                    count(*) FILTER (WHERE c > 1) / (SELECT n FROM total)    AS rework_rate,
                    sum(c - 1) FILTER (WHERE c > 1)                          AS extra_executions
             FROM per
-            GROUP BY 1
+            GROUP BY 1, 2
             HAVING count(*) FILTER (WHERE c > 1) > 0
             ORDER BY extra_executions DESC
             """,
@@ -349,6 +355,7 @@ public sealed class AnalyticsRepository
                   AND analytics.case_touched_by_group(object_id, @scopeGroup) GROUP BY 1
             )
             SELECT analytics.label_activity(act.event_type) AS event_type,
+                   act.event_type                          AS event_type_key,
                    act.freq, act.manual, coalesce(ent.h, 0) AS outcome_entropy,
                    act.freq * act.manual * (1 - coalesce(ent.h, 0)) AS score
             FROM act LEFT JOIN ent ON ent.a = act.event_type

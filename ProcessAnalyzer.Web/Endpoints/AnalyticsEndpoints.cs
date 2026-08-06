@@ -99,6 +99,7 @@ public static class AnalyticsEndpoints
                 CaseRepository repo,
                 string? objectType,
                 string? lastActivity,
+                string? withActivity,
                 string? search,
                 string? from,
                 string? until,
@@ -115,6 +116,7 @@ public static class AnalyticsEndpoints
                                 objectType,
                                 Scope.FromQuery(from, until, group),
                                 lastActivity,
+                                withActivity,
                                 search,
                                 t
                             ),

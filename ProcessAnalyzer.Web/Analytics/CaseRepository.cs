@@ -18,11 +18,20 @@ public sealed class CaseRepository
 
     public CaseRepository(IDbContextFactory<AppDbContext> factory) => _factory = factory;
 
-    /// <summary>Cases of one type, newest first, optionally only those whose last step is a given activity.</summary>
+    /// <summary>
+    /// Cases of one type, newest first. Optionally only those standing at a given activity, or only those that passed
+    /// through one at any point.
+    /// </summary>
+    /// <remarks>
+    /// The two activity filters answer different questions and both are needed. "Standing at" is the queue in front of
+    /// a step. "Passed through" is what a reader wants after seeing a step in an aggregate: show me those cases. Using
+    /// the first for the second would silently answer with the few cases that happened to stop there.
+    /// </remarks>
     public Task<List<Dictionary<string, object?>>> ListAsync(
         string objectType,
         Scope scope,
         string? lastActivity,
+        string? withActivity,
         string? search,
         CancellationToken ct
     ) =>
@@ -53,6 +62,13 @@ public sealed class CaseRepository
               AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
               AND analytics.case_touched_by_group(l.object_id, @scopeGroup)
               AND (@lastActivity = '' OR s.event_type = @lastActivity)
+              AND (
+                  @withActivity = ''
+                  OR EXISTS (
+                      SELECT 1 FROM analytics.object_timeline w
+                      WHERE w.object_id = l.object_id AND w.event_type = @withActivity
+                  )
+              )
               AND (@search = '' OR split_part(l.object_id, ':', 2) ILIKE '%' || @search || '%')
             ORDER BY l.last_ts DESC
             LIMIT 200
@@ -61,6 +77,7 @@ public sealed class CaseRepository
             [
                 ("objectType", objectType),
                 ("lastActivity", lastActivity ?? string.Empty),
+                ("withActivity", withActivity ?? string.Empty),
                 ("search", search ?? string.Empty),
                 .. scope.Parameters(),
             ]
