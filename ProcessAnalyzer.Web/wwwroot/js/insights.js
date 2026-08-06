@@ -17,6 +17,9 @@ const pf = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDig
 
 let objectType = null;
 
+/** The viewer of the diagram page, attached on first render. */
+let viewer = null;
+
 /** Hours, because "132840 Sekunden" is not a number anybody can act on. */
 function hours(seconds) {
   if (seconds === null || seconds === undefined) return '—';
@@ -403,13 +406,13 @@ async function renderModels() {
     // decides its own size. Width in percent lets the SVG's own viewBox do the scaling, so the text stays sharp at
     // every step instead of being resampled.
     $('modelView').innerHTML = `<img class="model-image" src="${url}" alt="Prozessdiagramm" />`;
-    applyZoom();
-    // The shared viewer adds full screen and behaves exactly like the one inside the drill-down. The older buttons above
-    // stay for now; both drive the same picture.
+    // One viewer, attached once. It reads whatever picture is in the box, so switching tabs above does not need to
+    // tell it anything.
     if (!$('modelView').dataset.viewer) {
-      attachViewer($('modelView'), { title: 'Prozessdiagramm' });
+      viewer = attachViewer($('modelView'), { title: 'Prozessdiagramm' });
       $('modelView').dataset.viewer = 'ready';
     }
+    viewer?.setZoom(1);
   };
 
   const renderTabs = (key) => {
@@ -448,97 +451,6 @@ async function renderModels() {
   // comparison is not where somebody starts.
   select.value = perProcess.length ? perProcess[0].slug : 'all';
   renderTabs(select.value);
-}
-
-// ===== the diagram viewer =====
-//
-// Fitted to the width on arrival: a mined graph is a few thousand points wide, and at its own size the reader gets
-// the top left corner of a canvas with no way to tell where they are. Zoom is a factor ON the fitted width, so 100 %
-// always means "whole diagram" and every step keeps the aspect ratio.
-
-const ZoomSteps = [1, 1.5, 2, 3, 4, 6, 8];
-
-/** 1 = fitted to the width. "Lesegröße" leaves the ladder and shows the SVG at its own size. */
-let zoom = 1;
-let naturalSize = false;
-
-function applyZoom() {
-  const image = document.querySelector('#modelView .model-image');
-  if (!image) return;
-
-  if (naturalSize) {
-    image.style.width = 'auto';
-    image.style.maxWidth = 'none';
-    $('zoomLevel').textContent = 'Lesegröße';
-    return;
-  }
-
-  image.style.maxWidth = 'none';
-  image.style.width = `${zoom * 100}%`;
-  $('zoomLevel').textContent = `${Math.round(zoom * 100)} %`;
-}
-
-function stepZoom(direction) {
-  // Coming back from natural size lands on the nearest ladder rung rather than jumping to the fitted view, so the
-  // step the reader asked for is the step they get.
-  if (naturalSize) {
-    naturalSize = false;
-    zoom = ZoomSteps[ZoomSteps.length - 1];
-  }
-
-  const index = ZoomSteps.indexOf(zoom);
-  const next = index < 0 ? 0 : Math.min(Math.max(index + direction, 0), ZoomSteps.length - 1);
-  zoom = ZoomSteps[next];
-  applyZoom();
-}
-
-function initModelViewer() {
-  const view = $('modelView');
-
-  $('zoomFit').addEventListener('click', () => {
-    naturalSize = false;
-    zoom = 1;
-    applyZoom();
-    view.scrollTo({ left: 0, top: 0 });
-  });
-  $('zoomIn').addEventListener('click', () => stepZoom(1));
-  $('zoomOut').addEventListener('click', () => stepZoom(-1));
-  $('zoomFull').addEventListener('click', () => {
-    naturalSize = true;
-    applyZoom();
-  });
-
-  // Ctrl + wheel, not plain wheel: the page itself scrolls with the wheel, and a diagram that swallows that gesture
-  // traps the reader inside the box.
-  view.addEventListener(
-    'wheel',
-    (event) => {
-      if (!event.ctrlKey) return;
-      event.preventDefault();
-      stepZoom(event.deltaY < 0 ? 1 : -1);
-    },
-    { passive: false }
-  );
-
-  // Drag to pan. Scrollbars alone work, but on a graph this wide nobody finds the place they were looking at again.
-  let dragging = null;
-  view.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    dragging = { x: event.clientX, y: event.clientY, left: view.scrollLeft, top: view.scrollTop };
-    view.setPointerCapture(event.pointerId);
-    view.classList.add('dragging');
-  });
-  view.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
-    view.scrollLeft = dragging.left - (event.clientX - dragging.x);
-    view.scrollTop = dragging.top - (event.clientY - dragging.y);
-  });
-  const endDrag = () => {
-    dragging = null;
-    view.classList.remove('dragging');
-  };
-  view.addEventListener('pointerup', endDrag);
-  view.addEventListener('pointercancel', endDrag);
 }
 
 export async function renderInsights() {
@@ -584,7 +496,6 @@ export function initInsights() {
   // The case search re-queries only the case list; re-rendering every panel for a keystroke would make typing lag.
   initCases(() => renderCases($('objectTypeSelect').value));
 
-  initModelViewer();
   initNaming();
   initDrill();
   initReport();

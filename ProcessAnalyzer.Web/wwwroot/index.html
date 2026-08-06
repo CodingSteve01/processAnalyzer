@@ -298,17 +298,8 @@
         </label>
       </div>
       <div class="model-tabs" id="modelTabs"></div>
-      <!-- A mined graph is metres wide. Shown at its own size it is the top left corner of a canvas nobody can
-           navigate, so it arrives fitted to the width and is zoomed deliberately from there. -->
-      <div class="model-toolbar">
-        <button type="button" class="model-zoom" id="zoomFit" title="Ganzes Diagramm zeigen">Einpassen</button>
-        <button type="button" class="model-zoom" id="zoomOut" title="Kleiner" aria-label="Kleiner">−</button>
-        <span class="model-zoom-level" id="zoomLevel">100 %</span>
-        <button type="button" class="model-zoom" id="zoomIn" title="Größer" aria-label="Größer">+</button>
-        <button type="button" class="model-zoom" id="zoomFull" title="Schrift in Lesegröße">Lesegröße</button>
-        <span class="spacer"></span>
-        <span class="hint">Ziehen verschiebt das Bild, Strg + Mausrad zoomt.</span>
-      </div>
+      <!-- No toolbar here: the shared viewer attaches its own above the box, the same one every other picture in this
+           tool has. Two sets of buttons on one picture is the confusion it exists to prevent. -->
       <div class="model-view" id="modelView"></div>
     </section>
 
