@@ -83,6 +83,59 @@ public sealed class CaseRepository
             ]
         );
 
+    /// <summary>
+    /// The whole business transaction around one case: its own steps plus those of everything it touches.
+    /// </summary>
+    /// <remarks>
+    /// An object-centric log has no single case, and that is its strength — an order, its tour, its papers and its
+    /// accounting rows each have a life of their own. But the question a person asks about an order is "what happened
+    /// with this order", and the answer spans all of them: created, planned onto a tour, papers back from the driver,
+    /// document filed, reconciled into accounting.
+    /// <para>
+    /// One hop, not two. The neighbours of an order are its tour, its notes and its rows; the neighbours of THOSE reach
+    /// half the log within two steps, and a timeline of nine hundred events is not an answer.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ChainAsync(string objectId, CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH seed AS (
+                SELECT object_id, object_type FROM analytics.object_lifecycle WHERE object_id = @objectId
+            ),
+            scope AS (
+                SELECT @objectId AS object_id
+                UNION
+                -- Only other KINDS of object. A neighbour of the same kind is a sibling, not a stage: two orders that
+                -- share one declaration are not one transaction, and pulling them in made this table read like a list of
+                -- other people's orders.
+                SELECT DISTINCT other.object_id
+                FROM ocel.e2o mine
+                JOIN ocel.e2o other ON other.event_id = mine.event_id
+                JOIN analytics.object_lifecycle l ON l.object_id = other.object_id
+                CROSS JOIN seed
+                WHERE mine.object_id = @objectId
+                  AND l.object_type <> seed.object_type
+            )
+            SELECT analytics.label_object(t.object_type)                            AS gehoert_zu,
+                   split_part(t.object_id, ':', 2)                                  AS nummer,
+                   t.object_id                                                      AS schluessel,
+                   t.object_id = @objectId                                          AS ist_dieser_fall,
+                   analytics.label_activity(t.event_type)                           AS was,
+                   t.event_type                                                     AS was_key,
+                   t.object_type                                                    AS prozess_key,
+                   t.ts                                                             AS wann,
+                   analytics.person(t.actor_key)                                    AS wer,
+                   t.actor_kind                                                     AS art
+            FROM analytics.object_timeline t
+            JOIN scope s ON s.object_id = t.object_id
+            ORDER BY t.ts, t.object_id
+            LIMIT 300
+            """,
+            ct,
+            ("objectId", objectId)
+        );
+
     /// <summary>Everything that happened to one object, in order, with the gap before each step.</summary>
     /// <remarks>
     /// The gap is what makes the row worth reading: a list of timestamps requires the reader to do the subtraction,
