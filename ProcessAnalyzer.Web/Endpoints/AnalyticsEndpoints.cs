@@ -16,6 +16,11 @@ public static class AnalyticsEndpoints
 
         group.MapGet("/inventory", (AnalyticsRepository repo, CancellationToken token) => repo.InventoryAsync(token));
 
+        // The groups a question can be narrowed to. Only groups that actually did something: a directory has hundreds
+        // of groups, most of which never appear in the log, and a select box of empty options is a worse answer than
+        // none.
+        group.MapGet("/groups", (AnalyticsRepository repo, CancellationToken token) => repo.ActorGroupsAsync(token));
+
         group.MapPost(
             "/projection/rebuild",
             async (ProjectionService projection, IHostApplicationLifetime lifetime) =>
@@ -44,22 +49,41 @@ public static class AnalyticsEndpoints
 
         // Discovery: what exists at all. None of these take an object type — finding out which processes there are
         // is the question that comes before choosing one.
-        group.MapGet("/discovery/processes", (DiscoveryRepository repo, CancellationToken t) => repo.ProcessesAsync(t));
-        group.MapGet("/discovery/decisions", (DiscoveryRepository repo, CancellationToken t) => repo.DecisionsAsync(t));
+        group.MapGet(
+            "/discovery/processes",
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.ProcessesAsync(Scope.FromQuery(from, until, group), t)
+        );
+        group.MapGet(
+            "/discovery/decisions",
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.DecisionsAsync(Scope.FromQuery(from, until, group), t)
+        );
         group.MapGet(
             "/discovery/collaboration",
-            (DiscoveryRepository repo, CancellationToken t) => repo.CollaborationAsync(t)
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.CollaborationAsync(Scope.FromQuery(from, until, group), t)
         );
         group.MapGet("/discovery/calendar", (DiscoveryRepository repo, CancellationToken t) => repo.CalendarAsync(t));
-        group.MapGet("/discovery/roles", (DiscoveryRepository repo, CancellationToken t) => repo.RolesAsync(t));
+        group.MapGet(
+            "/discovery/roles",
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.RolesAsync(Scope.FromQuery(from, until, group), t)
+        );
         group.MapGet(
             "/discovery/who-does-what",
-            (DiscoveryRepository repo, CancellationToken t) => repo.WhoDoesWhatAsync(t)
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.WhoDoesWhatAsync(Scope.FromQuery(from, until, group), t)
         );
-        group.MapGet("/discovery/handovers", (DiscoveryRepository repo, CancellationToken t) => repo.HandoversAsync(t));
+        group.MapGet(
+            "/discovery/handovers",
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.HandoversAsync(Scope.FromQuery(from, until, group), t)
+        );
         group.MapGet(
             "/discovery/role-handovers",
-            (DiscoveryRepository repo, CancellationToken t) => repo.RoleHandoverMatrixAsync(t)
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.RoleHandoverMatrixAsync(Scope.FromQuery(from, until, group), t)
         );
         group.MapGet("/discovery/coverage", (DiscoveryRepository repo, CancellationToken t) => repo.CoverageAsync(t));
 
@@ -78,6 +102,7 @@ public static class AnalyticsEndpoints
                 string? search,
                 string? from,
                 string? until,
+                string? group,
                 CancellationToken t
             ) =>
                 string.IsNullOrWhiteSpace(objectType)
@@ -88,7 +113,7 @@ public static class AnalyticsEndpoints
                             objectType,
                             rows = await repo.ListAsync(
                                 objectType,
-                                Period.FromQuery(from, until),
+                                Scope.FromQuery(from, until, group),
                                 lastActivity,
                                 search,
                                 t
@@ -105,32 +130,43 @@ public static class AnalyticsEndpoints
 
         group.MapGet(
             "/trend",
-            async (CaseRepository repo, string? objectType, string? from, string? until, CancellationToken t) =>
+            async (
+                CaseRepository repo,
+                string? objectType,
+                string? from,
+                string? until,
+                string? group,
+                CancellationToken t
+            ) =>
                 string.IsNullOrWhiteSpace(objectType)
                     ? Results.BadRequest(new { error = "objectType is required" })
                     : Results.Ok(
-                        new { objectType, rows = await repo.TrendAsync(objectType, Period.FromQuery(from, until), t) }
+                        new
+                        {
+                            objectType,
+                            rows = await repo.TrendAsync(objectType, Scope.FromQuery(from, until, group), t),
+                        }
                     )
         );
 
-        MapScoped(group, "/activities", (repo, type, period, token) => repo.ActivitiesAsync(type, period, token));
-        MapScoped(group, "/throughput", (repo, type, period, token) => repo.ThroughputAsync(type, period, token));
-        MapScoped(group, "/transitions", (repo, type, period, token) => repo.TransitionsAsync(type, period, token));
-        MapScoped(group, "/rework", (repo, type, period, token) => repo.ReworkAsync(type, period, token));
+        MapScoped(group, "/activities", (repo, type, scope, token) => repo.ActivitiesAsync(type, scope, token));
+        MapScoped(group, "/throughput", (repo, type, scope, token) => repo.ThroughputAsync(type, scope, token));
+        MapScoped(group, "/transitions", (repo, type, scope, token) => repo.TransitionsAsync(type, scope, token));
+        MapScoped(group, "/rework", (repo, type, scope, token) => repo.ReworkAsync(type, scope, token));
         MapScoped(
             group,
             "/negative-outcomes",
-            (repo, type, period, token) => repo.NegativeOutcomesAsync(type, period, token)
+            (repo, type, scope, token) => repo.NegativeOutcomesAsync(type, scope, token)
         );
-        MapScoped(group, "/variants", (repo, type, period, token) => repo.VariantsAsync(type, period, token));
-        MapScoped(group, "/automation", (repo, type, period, token) => repo.AutomationAsync(type, period, token));
+        MapScoped(group, "/variants", (repo, type, scope, token) => repo.VariantsAsync(type, scope, token));
+        MapScoped(group, "/automation", (repo, type, scope, token) => repo.AutomationAsync(type, scope, token));
         MapScoped(
             group,
             "/automation-candidates",
-            (repo, type, period, token) => repo.AutomationCandidatesAsync(type, period, token)
+            (repo, type, scope, token) => repo.AutomationCandidatesAsync(type, scope, token)
         );
-        MapScoped(group, "/handovers", (repo, type, period, token) => repo.HandoversAsync(type, period, token));
-        MapScoped(group, "/endpoints", (repo, type, period, token) => repo.EndpointsAsync(type, period, token));
+        MapScoped(group, "/handovers", (repo, type, scope, token) => repo.HandoversAsync(type, scope, token));
+        MapScoped(group, "/endpoints", (repo, type, scope, token) => repo.EndpointsAsync(type, scope, token));
 
         return app;
     }
@@ -146,7 +182,7 @@ public static class AnalyticsEndpoints
     private static void MapScoped(
         RouteGroupBuilder group,
         string route,
-        Func<AnalyticsRepository, string, Period, CancellationToken, Task<List<Dictionary<string, object?>>>> query
+        Func<AnalyticsRepository, string, Scope, CancellationToken, Task<List<Dictionary<string, object?>>>> query
     ) =>
         group.MapGet(
             route,
@@ -155,6 +191,7 @@ public static class AnalyticsEndpoints
                 string? objectType,
                 string? from,
                 string? until,
+                string? group,
                 CancellationToken token
             ) =>
             {
@@ -166,16 +203,17 @@ public static class AnalyticsEndpoints
                         }
                     );
 
-                var period = Period.FromQuery(from, until);
+                var scope = Scope.FromQuery(from, until, group);
 
                 return Results.Ok(
                     new
                     {
                         objectType,
-                        // Echoed back so the reader sees the window that was actually applied, not the one they meant.
-                        from = period.From,
-                        until = period.Until,
-                        rows = await query(repo, objectType, period, token),
+                        // Echoed back so the reader sees the scope that was actually applied, not the one they meant.
+                        from = scope.Period.From,
+                        until = scope.Period.Until,
+                        group = scope.Group,
+                        rows = await query(repo, objectType, scope, token),
                     }
                 );
             }

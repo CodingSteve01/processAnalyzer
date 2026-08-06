@@ -23,6 +23,28 @@ public sealed class AnalyticsRepository
 
     public AnalyticsRepository(IDbContextFactory<AppDbContext> factory) => _factory = factory;
 
+    /// <summary>
+    /// The groups a question can be narrowed to, with how much of the log each of them accounts for.
+    /// </summary>
+    /// <remarks>
+    /// Only groups that appear in the log. A directory carries hundreds of groups and most never touch a case; listing
+    /// them all would bury the four that matter, and every one of them would answer "no data".
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ActorGroupsAsync(CancellationToken ct) =>
+        QueryAsync(
+            """
+            SELECT g.group_name              AS gruppe,
+                   count(DISTINCT e.actor_key) AS personen,
+                   count(*)                  AS schritte
+            FROM dim.actor_group g
+            JOIN ocel.event e ON e.actor_key = g.actor_key
+            GROUP BY 1
+            HAVING count(*) > 0
+            ORDER BY count(*) DESC, 1
+            """,
+            ct
+        );
+
     /// <summary>What is in the log at all: which object types exist, how much of each, and over what period.</summary>
     public Task<List<Dictionary<string, object?>>> InventoryAsync(CancellationToken ct) =>
         QueryAsync(
@@ -46,7 +68,7 @@ public sealed class AnalyticsRepository
     /// <summary>Which activities an object type actually goes through, and who performs them.</summary>
     public Task<List<Dictionary<string, object?>>> ActivitiesAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -54,17 +76,18 @@ public sealed class AnalyticsRepository
             SELECT analytics.label_activity(event_type) AS event_type,
                    count(*)                                                          AS events,
                    count(DISTINCT object_id)                                         AS objects,
-                   count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*)  AS manual_share,
+                   count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0)  AS manual_share,
                    count(*) FILTER (WHERE seq = 1)                                   AS as_first_step
             FROM analytics.object_timeline
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(object_id, @scopeGroup)
             GROUP BY 1
             ORDER BY events DESC
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -74,7 +97,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> ThroughputAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -89,10 +112,11 @@ public sealed class AnalyticsRepository
             FROM analytics.object_lifecycle
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND NOT is_open
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(object_id, @scopeGroup) AND NOT is_open
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -107,7 +131,7 @@ public sealed class AnalyticsRepository
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> TransitionsAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -120,24 +144,21 @@ public sealed class AnalyticsRepository
             FROM analytics.object_timeline
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND prev_type IS NOT NULL
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(object_id, @scopeGroup) AND prev_type IS NOT NULL
             GROUP BY 1, 2
             ORDER BY total_seconds DESC
             LIMIT 25
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
     /// Rework: activities that happen more than once for the same object. The single most unambiguous waste signal
     /// in an event log — nobody plans to approve the same document twice.
     /// </summary>
-    public Task<List<Dictionary<string, object?>>> ReworkAsync(
-        string objectType,
-        Period period,
-        CancellationToken ct
-    ) =>
+    public Task<List<Dictionary<string, object?>>> ReworkAsync(string objectType, Scope scope, CancellationToken ct) =>
         QueryAsync(
             """
             WITH per AS (
@@ -146,6 +167,7 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
                 GROUP BY 1, 2
             ),
             total AS (
@@ -153,6 +175,7 @@ public sealed class AnalyticsRepository
                 FROM analytics.object_timeline WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
             )
             SELECT analytics.label_activity(event_type) AS event_type,
                    count(*) FILTER (WHERE c > 1)                            AS rework_cases,
@@ -164,7 +187,7 @@ public sealed class AnalyticsRepository
             ORDER BY extra_executions DESC
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -178,7 +201,7 @@ public sealed class AnalyticsRepository
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> NegativeOutcomesAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -189,12 +212,14 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
                   AND (raw_event_type LIKE '%discarded%' OR raw_event_type LIKE '%rejected%'
                        OR attrs ->> 'status' = 'Error' OR attrs ->> 'succeeded' = 'false')
             ),
             total AS (SELECT count(*)::numeric AS n FROM analytics.object_lifecycle WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil))
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(object_id, @scopeGroup))
             SELECT analytics.label_activity(f.event_type) AS event_type,
                    count(DISTINCT f.object_id)                             AS cases,
                    count(DISTINCT f.object_id) / (SELECT n FROM total)     AS case_share,
@@ -203,18 +228,20 @@ public sealed class AnalyticsRepository
                     FROM analytics.object_lifecycle l
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
-                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
+                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+                      AND analytics.case_touched_by_group(l.object_id, @scopeGroup) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
                    (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY biz_seconds)
                     FROM analytics.object_lifecycle l
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
-                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
+                      AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+                      AND analytics.case_touched_by_group(l.object_id, @scopeGroup) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
             FROM flagged f
             GROUP BY 1
             ORDER BY cases DESC
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -224,7 +251,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> VariantsAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -237,6 +264,7 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
                 GROUP BY object_id
             ),
             agg AS (
@@ -245,14 +273,14 @@ public sealed class AnalyticsRepository
                 GROUP BY v.variant
             )
             SELECT variant, n, avg_seconds,
-                   n::numeric / sum(n) OVER ()                                                    AS share,
-                   sum(n) OVER (ORDER BY n DESC ROWS UNBOUNDED PRECEDING)::numeric / sum(n) OVER () AS cum_share
+                   n::numeric / NULLIF(sum(n) OVER (), 0)                                        AS share,
+                   sum(n) OVER (ORDER BY n DESC ROWS UNBOUNDED PRECEDING)::numeric / NULLIF(sum(n) OVER (), 0) AS cum_share
             FROM agg
             ORDER BY n DESC
             LIMIT 20
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -261,24 +289,26 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> AutomationAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
             """
             SELECT count(*)                                                             AS cases,
-                   count(*) FILTER (WHERE NOT has_human)::numeric / count(*)            AS straight_through_share,
-                   (SELECT count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*)
+                   count(*) FILTER (WHERE NOT has_human)::numeric / NULLIF(count(*), 0)  AS straight_through_share,
+                   (SELECT count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0)
                     FROM analytics.object_timeline WHERE object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-                      AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil))     AS manual_event_share
+                      AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                      AND analytics.case_touched_by_group(object_id, @scopeGroup))     AS manual_event_share
             FROM analytics.object_lifecycle
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND NOT is_open
+              AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(object_id, @scopeGroup) AND NOT is_open
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -288,7 +318,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> AutomationCandidatesAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -298,11 +328,12 @@ public sealed class AnalyticsRepository
                 FROM analytics.object_timeline
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) AND prev_type IS NOT NULL
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup) AND prev_type IS NOT NULL
                 GROUP BY 1, 2
             ),
             p AS (
-                SELECT a, n::numeric / sum(n) OVER (PARTITION BY a) AS pr, count(*) OVER (PARTITION BY a) AS deg
+                SELECT a, n::numeric / NULLIF(sum(n) OVER (PARTITION BY a), 0) AS pr, count(*) OVER (PARTITION BY a) AS deg
                 FROM edges
             ),
             ent AS (
@@ -311,10 +342,11 @@ public sealed class AnalyticsRepository
             act AS (
                 SELECT event_type,
                        count(*) AS freq,
-                       count(*) FILTER (WHERE actor_kind = 'human')::numeric / count(*) AS manual
+                       count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0) AS manual
                 FROM analytics.object_timeline WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
-                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil) GROUP BY 1
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup) GROUP BY 1
             )
             SELECT analytics.label_activity(act.event_type) AS event_type,
                    act.freq, act.manual, coalesce(ent.h, 0) AS outcome_entropy,
@@ -325,7 +357,7 @@ public sealed class AnalyticsRepository
             LIMIT 15
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -334,7 +366,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> HandoversAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -349,6 +381,7 @@ public sealed class AnalyticsRepository
             WHERE t.object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
               AND t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
             GROUP BY 1, 2
             HAVING count(DISTINCT t.object_id) >= 5
@@ -356,7 +389,7 @@ public sealed class AnalyticsRepository
             LIMIT 40
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     /// <summary>
@@ -365,7 +398,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     public Task<List<Dictionary<string, object?>>> EndpointsAsync(
         string objectType,
-        Period period,
+        Scope scope,
         CancellationToken ct
     ) =>
         QueryAsync(
@@ -379,11 +412,12 @@ public sealed class AnalyticsRepository
                 WHERE t.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                 ORDER BY t.object_id, t.seq DESC
             )
             SELECT analytics.label_activity(s.event_type) AS last_activity,
                    count(*) AS cases,
-                   count(*)::numeric / sum(count(*)) OVER () AS share,
+                   count(*)::numeric / NULLIF(sum(count(*)) OVER (), 0) AS share,
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds) AS median_seconds
             FROM last_step s
             JOIN analytics.object_lifecycle l ON l.object_id = s.object_id
@@ -391,7 +425,7 @@ public sealed class AnalyticsRepository
             ORDER BY cases DESC
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 
     private Task<List<Dictionary<string, object?>>> QueryAsync(
