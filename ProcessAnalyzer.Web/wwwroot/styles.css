@@ -963,3 +963,26 @@ table.data tr.selected { background: var(--accent-dim); }
   margin: 8px 0 16px;
   line-height: 1.5;
 }
+
+/* --- filter chips ------------------------------------------------------------------------------------------------ */
+
+.chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.chip:hover { background: var(--bg-hover); }
+.chip-x { color: var(--text-muted); font-size: 1rem; line-height: 1; }
+
+.step-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }

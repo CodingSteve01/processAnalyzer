@@ -16,7 +16,7 @@
 // clickable and the way back is visible.
 
 import { request } from './api.js';
-import { periodQuery, periodLabel, setPeriod } from './period.js';
+import { periodQuery, periodLabel, setPeriod, setStepFilter, scopeQuery } from './period.js';
 import { $, escape } from './utils.js';
 import { drawLineChart } from './linechart.js';
 import { attachViewer } from './imageview.js';
@@ -174,7 +174,7 @@ async function renderProcesses() {
 async function renderProcess(process) {
   const scoped = (route) => request(`/api/${route}?objectType=${encodeURIComponent(process)}${periodQuery()}`);
   const [inventory, throughput, activities, transitions, rework, variants, automation, drivers] = await Promise.all([
-    request('/api/inventory'),
+    request(`/api/inventory${scopeQuery()}`),
     scoped('throughput'),
     scoped('activities'),
     scoped('transitions'),
@@ -225,6 +225,26 @@ async function renderProcess(process) {
     <p class="caveat">Ein Klick auf einen Schritt zeigt die Fälle, die durch ihn gelaufen sind.</p>
     ${stepTable(rowsOf(activities))}
 
+    <section id="drillRulesSection" hidden>
+      <h3>Regeln, die dieser Ablauf bricht</h3>
+      <p class="caveat">
+        Aus dem Log gelernt, nicht konfiguriert: was immer vorher passiert, was nie zusammen vorkommt, wie oft ein
+        Schritt vorkommen darf. Ein Verstoss ist kein Fehler an sich — die Regel kommt aus dem Verhalten, ein seltener
+        aber richtiger Weg sieht genauso aus.
+      </p>
+      <div id="drillRules"></div>
+    </section>
+
+    <section id="drillBatchSection" hidden>
+      <h3>Stapelarbeit</h3>
+      <p class="caveat">
+        Erledigt in Blöcken statt laufend. Wer zwanzig Papiere um vier Uhr abzeichnet, ist nicht langsam, sondern
+        stapelt, und im Mittelwert sehen beide gleich aus. Der Stapel ist eine Warteschlange, die jemand absichtlich
+        gebaut hat.
+      </p>
+      <div id="drillBatches"></div>
+    </section>
+
     <section id="drillTrendSection" hidden>
       <h3>Verlauf je Woche</h3>
       <div class="chart-box"><svg id="drillTrend" preserveAspectRatio="none"></svg></div>
@@ -237,6 +257,7 @@ async function renderProcess(process) {
   // than the page.
   drawProcessTrend(process);
   showProcessDiagram(process, names.process);
+  showMinedInsights(names.process);
 
   for (const item of $('drillBody').querySelectorAll('li[data-finding]')) {
     item.addEventListener('click', () => {
@@ -424,6 +445,12 @@ async function renderStep(process, step) {
            </div>`
         : ''
     }
+    <p class="step-filters">
+      <button type="button" class="btn-secondary" id="stepOnlyWith">Nur Fälle mit diesem Schritt</button>
+      <button type="button" class="btn-secondary" id="stepOnlyWithout">Nur Fälle ohne ihn</button>
+      <span class="hint">Gilt für das ganze Werkzeug, sichtbar oben als Filter.</span>
+    </p>
+
     <h3>Wann dieser Schritt passiert</h3>
     <div id="drillStepChart"></div>
 
@@ -432,6 +459,16 @@ async function renderStep(process, step) {
     ${caseTable(rowsOf(cases))}`;
 
   drawActivityTrend(process, step);
+
+  // The comparison, from the place where somebody is looking at one step: these cases, or the ones without it. Both go
+  // through the same scope every panel honours, so the answer is consistent wherever the reader goes next.
+  $('stepOnlyWith').addEventListener('click', () => setStepFilter('has', step, names.step));
+  $('stepOnlyWithout').addEventListener('click', () => {
+    setStepFilter('without', step, names.step);
+    // Staying on a step while filtering it away would show an empty list and look broken. The process is where the
+    // difference is visible.
+    goTo({ process });
+  });
 
   for (const row of $('drillBody').querySelectorAll('tr[data-case]')) {
     row.addEventListener('click', () => {
@@ -616,7 +653,7 @@ async function showProcessDiagram(process, label) {
 
   const available = (status?.models ?? []).filter((model) => model.available);
   const entry = (status?.stats?.processes ?? []).find((row) => row.object_type === label);
-  const file = entry?.files?.main ?? entry?.files?.frequency;
+  const file = entry?.files?.bpmn ?? entry?.files?.main ?? entry?.files?.frequency;
   const model = file ? available.find((candidate) => candidate.name === file) : null;
 
   if (!model) {
@@ -899,4 +936,55 @@ function noteGap(text) {
   const gaps = host.dataset.gaps ? `${host.dataset.gaps}; ${text}` : text;
   host.dataset.gaps = gaps;
   host.textContent = `Nicht dargestellt: ${gaps}.`;
+}
+
+/**
+ * What the miner found beyond the picture: broken rules and batching.
+ *
+ * Read from the same status the diagram comes from, because both are the product of one mining run and a page that
+ * showed one without the other would suggest the second had nothing to say.
+ */
+async function showMinedInsights(label) {
+  const status = await request('/api/mining/status');
+  const stats = status?.stats;
+  if (!stats) return;
+
+  const rules = (stats.rules ?? []).find((row) => row.object_type === label);
+  if (rules?.violations?.length) {
+    $('drillRulesSection').hidden = false;
+    $('drillRules').innerHTML = `
+      <p class="reading">${nf.format(rules.cases)} von ${nf.format(rules.checked)} Fällen brechen mindestens eine Regel.</p>
+      <table class="data">
+        <thead><tr><th>Regel</th><th>betrifft</th><th class="num">Fälle</th></tr></thead>
+        <tbody>
+          ${rules.violations
+            .map(
+              (violation) =>
+                `<tr><td>${escape(violation.regel)}</td><td>${escape(violation.betrifft)}</td>` +
+                `<td class="num">${nf.format(violation.faelle)}</td></tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+  } else if (rules) {
+    noteGap(`dieser Ablauf bricht keine der ${nf.format(rules.checked)} geprüften Regeln`);
+  }
+
+  const batches = (stats.batches ?? []).find((row) => row.object_type === label);
+  if (batches?.batches?.length) {
+    $('drillBatchSection').hidden = false;
+    $('drillBatches').innerHTML = `
+      <table class="data">
+        <thead><tr><th>Schritt</th><th>Person</th><th class="num">Stapel</th><th>Art</th></tr></thead>
+        <tbody>
+          ${batches.batches
+            .map(
+              (row) =>
+                `<tr><td>${escape(row.schritt)}</td><td>${escape(row.person)}</td>` +
+                `<td class="num">${nf.format(row.stapel)}</td><td>${escape(row.art)}</td></tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+  }
 }

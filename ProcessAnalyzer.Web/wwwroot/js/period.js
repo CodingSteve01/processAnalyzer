@@ -16,6 +16,8 @@ const Presets = [
 let state = { preset: 'all', from: '', until: '' };
 let group = '';
 let groups = [];
+/** Cases that went through this step, and cases that never did. Both are keys, both are optional. */
+let steps = { has: null, hasLabel: null, without: null, withoutLabel: null };
 let onChange = () => {};
 
 /** The query suffix for an analytical request. Empty when nothing is filtered, so an unfiltered call stays unchanged. */
@@ -25,6 +27,8 @@ export function periodQuery() {
   if (from) parts.push(`from=${encodeURIComponent(from)}`);
   if (until) parts.push(`until=${encodeURIComponent(until)}`);
   if (group) parts.push(`group=${encodeURIComponent(group)}`);
+  if (steps.has) parts.push(`hasStep=${encodeURIComponent(steps.has)}`);
+  if (steps.without) parts.push(`withoutStep=${encodeURIComponent(steps.without)}`);
   return parts.length ? `&${parts.join('&')}` : '';
 }
 
@@ -37,6 +41,64 @@ export function scopeQuery() {
 /** The chosen group, or null for everybody. */
 export function currentGroup() {
   return group || null;
+}
+
+/**
+ * Narrows to cases that went through a step, or to those that never did.
+ *
+ * Two separate slots rather than a list, because these two are what a comparison needs and a stack of five conditions is
+ * a query language nobody asked for. Setting one replaces it; passing null clears it.
+ */
+export function setStepFilter(kind, key, label) {
+  if (kind === 'has') steps = { ...steps, has: key, hasLabel: label };
+  if (kind === 'without') steps = { ...steps, without: key, withoutLabel: label };
+  onChange();
+  renderChips();
+}
+
+/** What is currently narrowing the view, as chips. */
+export function activeFilters() {
+  const chips = [];
+  if (group) chips.push({ kind: 'group', label: `Gruppe: ${group}` });
+  if (steps.has) chips.push({ kind: 'has', label: `mit „${steps.hasLabel ?? steps.has}"` });
+  if (steps.without) chips.push({ kind: 'without', label: `ohne „${steps.withoutLabel ?? steps.without}"` });
+  return chips;
+}
+
+function clearFilter(kind) {
+  if (kind === 'group') {
+    group = '';
+    const select = document.getElementById('scopeGroup');
+    if (select) select.value = '';
+  }
+  if (kind === 'has') steps = { ...steps, has: null, hasLabel: null };
+  if (kind === 'without') steps = { ...steps, without: null, withoutLabel: null };
+  onChange();
+  renderChips();
+}
+
+/**
+ * Draws the chips.
+ *
+ * A filter nobody can see is a filter nobody can check, and a filter nobody can remove is worse: the reader ends up
+ * reloading the page to get out of a state they cannot find.
+ */
+function renderChips() {
+  const host = document.getElementById('scopeChips');
+  if (!host) return;
+
+  const chips = activeFilters();
+  host.innerHTML = chips
+    .map(
+      (chip) =>
+        `<button type="button" class="chip" data-kind="${chip.kind}">${chip.label}<span class="chip-x">×</span></button>`
+    )
+    .join('');
+  host.hidden = chips.length === 0;
+
+  for (const button of host.querySelectorAll('.chip')) {
+    button.addEventListener('click', () => clearFilter(button.dataset.kind));
+  }
 }
 
 /**
@@ -73,7 +135,13 @@ export function periodLabel() {
 
   // Named in the same breath as the window, because a figure that silently covers one group is the same trap as one
   // that silently covers one month.
-  return group ? `${window}, nur Fälle mit Beteiligung von „${group}"` : window;
+  const extra = activeFilters()
+    .filter((chip) => chip.kind !== 'group')
+    .map((chip) => chip.label);
+  const parts = [window];
+  if (group) parts.push(`nur Fälle mit Beteiligung von „${group}"`);
+  parts.push(...extra);
+  return parts.join(', ');
 }
 
 /** Explicit dates win over the preset — a typed date is a deliberate answer to the same question. */
@@ -125,6 +193,7 @@ export function initPeriod(container, changed) {
   groupSelect.addEventListener('change', () => {
     group = groupSelect.value;
     onChange();
+    renderChips();
   });
 
   // Loaded once and after the fact: the groups come out of the log, so the list cannot exist before the first pull,

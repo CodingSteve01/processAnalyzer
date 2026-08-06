@@ -81,6 +81,33 @@ public sealed class GroupScopeTests
         Assert.Empty(filtered);
     }
 
+    [Theory]
+    [MemberData(nameof(ScopedAnalytics))]
+    public async Task AnalyticsPanel_HonoursTheStepFilters(string panel)
+    {
+        await SeedAsync();
+        var repo = new AnalyticsRepository(_postgres.Factory);
+
+        // The activity key, not the label: the filter travels as the technical key because a label cannot be sent back
+        // as a filter. Every seeded case contains this step, so "without it" must leave nothing.
+        const string step = "demo.document.classification-resolved.v1";
+        var withStep = new Scope(Period.All, null, HasStep: step);
+        var withoutStep = new Scope(Period.All, null, WithoutStep: step);
+
+        var kept = await RunAnalyticsAsync(repo, panel, withStep);
+        var dropped = await RunAnalyticsAsync(repo, panel, withoutStep);
+
+        Assert.NotEmpty(kept);
+
+        if (panel is "throughput" or "automation")
+        {
+            Assert.Equal(0L, Convert.ToInt64(Assert.Single(dropped)["cases"]));
+            return;
+        }
+
+        Assert.Empty(dropped);
+    }
+
     [Fact]
     public async Task GroupThatExists_KeepsItsCases()
     {

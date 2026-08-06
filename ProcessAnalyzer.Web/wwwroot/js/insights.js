@@ -96,7 +96,7 @@ function wireDrill(containerId) {
 }
 
 async function renderInventory() {
-  const rows = await request('/api/inventory');
+  const rows = await request(`/api/inventory${scopeQuery()}`);
   const selector = $('objectTypeSelect');
   if (!selector.options.length) {
     rows.forEach((row) => {
@@ -390,6 +390,9 @@ async function renderModels() {
   };
   for (const process of perProcess) {
     views[process.slug] = [
+      // BPMN first: it is the notation the process documentation is already written in, and the only one of these a
+      // reader outside this repository can follow.
+      ...(process.files.bpmn ? [{ label: 'BPMN', name: process.files.bpmn }] : []),
       { label: 'Hauptpfade', name: process.files.main },
       { label: 'Alle Pfade', name: process.files.frequency },
       { label: 'Nach Dauer', name: process.files.performance },
