@@ -19,9 +19,20 @@ function show(view) {
   // not throw that away and arriving with a path must not be mistaken for an unknown view.
   if (currentView() !== view) window.location.hash = view;
   window.scrollTo({ top: 0 });
+
+  const build = onDemand.get(view);
+  if (build) build();
 }
 
 /** Wires the tabs and restores whatever view the URL asks for. */
+/** Views that build themselves when they are opened, because building them costs more than a tab switch should. */
+const onDemand = new Map();
+
+/** Registers a builder for a view. Called once per opening, not per render of everything else. */
+export function whenOpened(view, build) {
+  onDemand.set(view, build);
+}
+
 export function initViews() {
   document.querySelectorAll('.viewtab').forEach((tab) => {
     tab.addEventListener('click', () => show(tab.dataset.view));

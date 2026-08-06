@@ -13,6 +13,20 @@ public sealed class ProcessAnalyzerOptions
     public bool AllowWriteCapableLogin { get; set; }
 
     /// <summary>
+    /// Where a case can be opened in the system it came from, as object type to URL template with <c>{id}</c>.
+    /// </summary>
+    /// <remarks>
+    /// The difference between a poster and a working tool: a reader who finds a case here wants to act on it, and that
+    /// happens in the source system. Configuration rather than code, because the address of another system does not
+    /// belong in this repository and every installation points somewhere else.
+    /// <para>
+    /// Read as JSON, for example <c>{"order":"https://erp.example/orders/{id}"}</c>. The id is the business key of the
+    /// case, which is the part after the colon in an object id.
+    /// </para>
+    /// </remarks>
+    public string? SourceLinks { get; set; }
+
+    /// <summary>
     /// Key for the actor pseudonyms. Set once and keep it: rotating it changes every actor_key, which breaks the
     /// continuity of every handover statistic that was computed before the change.
     /// </summary>

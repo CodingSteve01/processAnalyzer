@@ -751,3 +751,118 @@ table.data tr.selected { background: var(--accent-dim); }
   .loading .loadingbar { animation: none; background: var(--accent); }
   .loading .main { opacity: 1; }
 }
+
+.drill-source-link {
+  display: inline-block;
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.drill-source-link:hover { text-decoration: underline; }
+
+/* --- report ----------------------------------------------------------------------------------------------------- */
+
+.report-block { margin: 0 0 28px; }
+.report-title { margin: 0 0 4px; font-size: 1.6rem; }
+.report-sub { margin: 0 0 16px; color: var(--text-muted); }
+.report-block h3 { margin: 24px 0 6px; }
+.report-block h4 { margin: 14px 0 4px; font-size: 0.95rem; color: var(--text-muted); }
+.report-block ul { margin: 0 0 12px; padding-left: 20px; }
+.report-block li { margin-bottom: 4px; line-height: 1.5; }
+.report-table th { font-weight: 600; }
+
+/* What the tool knows about the limits of its own numbers. On paper this is the part that keeps a reader honest. */
+.report-limit {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin: 8px 0;
+}
+
+/*
+ * Printing goes through the browser: no rendering service, no second layout to keep in sync, and what comes out is what
+ * the reader saw. Everything that is navigation disappears, and the sheet turns black on white — a dark dashboard on
+ * paper is a cartridge nobody gets back.
+ */
+@media print {
+  :root { color-scheme: light; }
+
+  .topbar,
+  .viewnav,
+  .scopebar,
+  .noprint,
+  .loadingbar { display: none !important; }
+
+  body { background: #fff; color: #000; font-size: 10.5pt; }
+  .main { max-width: none; padding: 0; opacity: 1 !important; }
+
+  /* Every other view is hidden anyway, but a print from the wrong tab should still produce the report. */
+  .view:not([data-view='bericht']) { display: none !important; }
+
+  /* Sections flow. Keeping a whole process together sounds tidy and produced a title page with four lines on it,
+     followed by a gap the length of a sheet. Only the small units are held together. */
+  .report-block { break-inside: auto; }
+  .report-block h3, .report-block h4 { break-after: avoid; }
+  .report-block ul, .report-limit { break-inside: avoid; }
+  table.data { break-inside: auto; }
+  table.data tr { break-inside: avoid; }
+  table.data th, table.data td { border-bottom: 1px solid #ccc; }
+  .report-limit { border-left-color: #999; color: #333; }
+  a { color: #000; text-decoration: none; }
+}
+
+/* --- charts inside the levels ------------------------------------------------------------------------------------ */
+
+/* The mined picture at process level: the same viewer, but half the height. It is context here, not the subject. */
+.model-view-inline { max-height: 40vh; }
+
+/*
+ * One step per day, as bars. Bars and not a line, because between two days there is nothing to interpolate: a line would
+ * draw a slope across a weekend on which nothing happened.
+ */
+.daybars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 90px;
+  padding: 4px 0;
+}
+
+.daybar {
+  flex: 1 1 auto;
+  min-width: 3px;
+  background: var(--accent);
+  opacity: 0.75;
+  border-radius: 2px 2px 0 0;
+}
+
+.daybar:hover { opacity: 1; }
+
+/*
+ * A case as one bar, marks at the real distances. The table next to it reads the same whether three steps happened in a
+ * minute or spread over a day; this does not.
+ */
+.casebar {
+  position: relative;
+  height: 34px;
+  margin: 4px 0 2px;
+  background: linear-gradient(var(--bg-card), var(--bg-card)) center/100% 4px no-repeat;
+  border-radius: var(--radius);
+}
+
+.casebar-mark {
+  position: absolute;
+  top: 9px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+/* Filled means a person did it. The distinction is the whole point of the picture. */
+.casebar-mark.human { background: var(--accent); }

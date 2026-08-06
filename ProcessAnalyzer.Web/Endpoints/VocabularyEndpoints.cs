@@ -186,6 +186,36 @@ public static class VocabularyEndpoints
             }
         );
 
+        // Where a case can be opened in the system it came from. Served rather than compiled in, so a public repository
+        // carries no address of anybody's ERP and an installation can point at its own without a release.
+        app.MapGet(
+            "/api/source-links",
+            (Options.ProcessAnalyzerOptions options) =>
+            {
+                if (string.IsNullOrWhiteSpace(options.SourceLinks))
+                    return Results.Ok(new Dictionary<string, string>(StringComparer.Ordinal));
+
+                try
+                {
+                    var map = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                        options.SourceLinks
+                    );
+                    return Results.Ok(map ?? new Dictionary<string, string>(StringComparer.Ordinal));
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // A broken template is worth saying out loud: silently serving none looks exactly like "not
+                    // configured", and somebody would spend the afternoon on a typo in an env file.
+                    return Results.Ok(
+                        new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["__error"] = "SourceLinks ist kein gültiges JSON",
+                        }
+                    );
+                }
+            }
+        );
+
         return app;
     }
 
