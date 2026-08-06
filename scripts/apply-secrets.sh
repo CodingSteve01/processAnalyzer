@@ -38,11 +38,16 @@ for name in $tokens; do
   fi
 
   echo "  $name: set (${#value} characters)"
+  # The target is a docker compose env file, and compose interpolates $NAME and ${NAME} in it. A value containing a
+  # dollar sign therefore arrives in the container shortened — the password hash is "pbkdf2-sha256$iterations$salt$key"
+  # and lost three segments that way, which surfaces as "wrong password" and points at nothing. "$$" is compose's
+  # escape for a literal dollar; doubling it here keeps the value intact on the other side.
+  escaped=${value//\$/\$\$}
   # Bash parameter expansion, not sed and not python. sed would interpret the slashes, ampersands and backslashes a
   # connection string is full of; python would work but adds an interpreter this script must not need — it runs on
   # deploy hosts, and the .NET SDK image alone already has no python3. Quoting both sides makes the replacement
   # literal on each.
-  content=${content//"#{$name}#"/"$value"}
+  content=${content//"#{$name}#"/"$escaped"}
 done
 
 if [ -n "$missing" ]; then
