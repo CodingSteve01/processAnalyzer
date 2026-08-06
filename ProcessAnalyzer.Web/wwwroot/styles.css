@@ -27,27 +27,32 @@
   --radius-lg: 12px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
+/*
+ * The light palette, applied by attribute rather than by media query.
+ *
+ * The resolved theme is stamped onto the root element before the first paint (see the inline script in index.html), so
+ * the system setting is honoured without this block having to exist twice — once for the preference and once for the
+ * switch. Following the system and being switchable are then the same mechanism, and they cannot disagree.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
 
-    --bg: #ffffff;
-    --bg-card: #f6f8fa;
-    --bg-hover: #eaeef2;
-    --bg-active: #d0d7de;
-    --border: #d0d7de;
-    --text: #1f2328;
-    --text-muted: #656d76;
-    --accent: #0969da;
-    --accent-dim: rgba(9, 105, 218, 0.1);
-    --error: #cf222e;
-    --error-dim: rgba(207, 34, 46, 0.1);
-    --warning: #d29922;
-    --warning-dim: rgba(154, 103, 0, 0.1);
-    --success: #1a7f37;
-    --success-dim: rgba(26, 127, 55, 0.1);
-    --info: #0969da;
-  }
+  --bg: #ffffff;
+  --bg-card: #f6f8fa;
+  --bg-hover: #eaeef2;
+  --bg-active: #d0d7de;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --accent: #0969da;
+  --accent-dim: rgba(9, 105, 218, 0.1);
+  --error: #cf222e;
+  --error-dim: rgba(207, 34, 46, 0.1);
+  --warning: #d29922;
+  --warning-dim: rgba(154, 103, 0, 0.1);
+  --success: #1a7f37;
+  --success-dim: rgba(26, 127, 55, 0.1);
+  --info: #0969da;
 }
 
 * {
@@ -433,6 +438,7 @@ table.data tbody tr:hover { background: var(--bg-card); }
  * be a whole page for this, which is why the rule used to name a tab.
  */
 #drillDiagramSection,
+#drillAllSection,
 #drillLandscape,
 #drillLandscapeReadout {
   width: min(calc(100vw - 48px), 1800px);
@@ -443,7 +449,11 @@ table.data tbody tr:hover { background: var(--bg-card); }
 /* The heading and the note stay with the picture, but not stretched to 1800 px of empty line. */
 #drillDiagramSection > h3,
 #drillDiagramSection > .model-tabs,
-#drillDiagramSection > #drillDiagram > .hint {
+#drillDiagramSection > #drillDiagram > .hint,
+#drillAllSection > h3,
+#drillAllSection > .caveat,
+#drillAllSection > .model-tabs,
+#drillAllSection > #drillAll > .hint {
   max-width: 1100px;
   margin-inline: auto;
 }
@@ -828,9 +838,6 @@ table.data tr.selected { background: var(--accent-dim); }
 
 /* --- charts inside the levels ------------------------------------------------------------------------------------ */
 
-/* The mined picture at process level: the same viewer, but half the height. It is context here, not the subject. */
-.model-view-inline { max-height: 40vh; }
-
 /*
  * One step per day, as bars. Bars and not a line, because between two days there is nothing to interpolate: a line would
  * draw a slope across a weekend on which nothing happened.
@@ -970,6 +977,8 @@ table.data tr.selected { background: var(--accent-dim); }
 
 .preview-title { font-size: 1.05rem; font-weight: 600; }
 .preview-tools { display: contents; }
+.preview-switcher { display: contents; }
+.preview-switcher .model-tabs { margin: 0; }
 .preview-tools .model-toolbar { margin: 0; }
 
 .preview-close {
@@ -988,18 +997,35 @@ table.data tr.selected { background: var(--accent-dim); }
 
 .preview-body { flex: 1; min-height: 0; display: flex; }
 
-/* The picture fills what is left of the window in both directions. */
-.model-view-preview {
+/*
+ * The picture fills what is left of the window.
+ *
+ * Deliberately NOT a flex container. It was one, centred in both directions, and then zooming did nothing at all: the
+ * picture is a flex item, a flex item shrinks back to its line, and `width: 200 %` on it resolved to exactly the width of
+ * the box. The zoom level in the toolbar counted up while the picture stood still. A scrolling block does what is
+ * actually wanted here — the picture may be larger than the window, and then you drag it.
+ */
+.model-view.model-view-preview {
   flex: 1;
+  display: block;
   width: auto;
   max-width: none;
   height: auto;
   max-height: none;
   margin: 0;
   transform: none;
-  align-items: center;
-  justify-content: center;
-  display: flex;
+  overflow: auto;
+  /* Beats both height caps: .model-view stops at 78vh and the inline box at 40vh, which is right in the page and wrong
+     here — a preview that leaves two thirds of the window empty is not a preview. */
+  max-height: none;
+  height: auto;
+}
+
+/* Centred while it fits, top-left once it does not — an overflowing picture that is centred cannot be scrolled to. */
+.model-view.model-view-preview > img,
+.model-view.model-view-preview > svg {
+  flex: none;
+  margin-inline: auto;
 }
 
 /* Nothing behind the preview scrolls: a page moving under an overlay is how a reader loses their place. */
@@ -1407,3 +1433,9 @@ table.data tr.selected { background: var(--accent-dim); }
 .drill-more > summary:hover { text-decoration: underline; }
 .drill-more[open] > summary { margin-bottom: 4px; }
 .drill-more h3 { margin-top: 26px; }
+
+
+/* A row the log cannot settle: the same account arrived through more than one channel. */
+.attention-row > td:first-child { border-left: 3px solid var(--warning); padding-left: 9px; }
+.actor-kind { min-width: 16ch; }
+.actor-note { min-width: 12ch; }

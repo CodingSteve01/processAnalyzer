@@ -157,6 +157,7 @@ public sealed class CaseMeasurementTests
             REFRESH MATERIALIZED VIEW analytics.object_timeline;
             REFRESH MATERIALIZED VIEW analytics.process_clock;
             REFRESH MATERIALIZED VIEW analytics.derived_end_activity;
+            REFRESH MATERIALIZED VIEW dim.actor_identity;
             REFRESH MATERIALIZED VIEW analytics.object_lifecycle;
             """,
             "{}"

@@ -13,6 +13,7 @@ import sys
 import traceback
 
 import pm4py
+from pm4py.visualization.dfg import visualizer as dfg_visualizer
 
 ARTIFACTS = os.environ.get("PROCESSANALYZER_ARTIFACTS", "/artifacts")
 LOG = os.path.join(ARTIFACTS, "log.sqlite")
@@ -94,6 +95,14 @@ def discover_per_process(ocel, minable, stats):
             # The classical analyses run on the flattened log of this one process. They are what pm4py is actually full
             # of, and the tool used three functions out of two hundred and seventy.
             frame = flatten(ocel, object_type)
+
+            # The plain flow chart, and the one that answers "how long between these two steps". Boxes with names and
+            # arrows between them: no gateways, no silent transitions, no places. The BPMN and the Petri net both spend
+            # most of their nodes expressing branching, which is exactly the part nobody asked about when they asked to
+            # see the flow.
+            for name, file in flow(frame, slug, object_type, stats).items():
+                files[name] = file
+
             bpmn_file = bpmn(frame, slug, object_type, stats)
             if bpmn_file:
                 files["bpmn"] = bpmn_file
@@ -138,6 +147,85 @@ def flatten(ocel, object_type):
     if "ocel:attr:actor" in frame.columns and "org:resource" not in frame.columns:
         frame = frame.rename(columns={"ocel:attr:actor": "org:resource"})
     return frame
+
+
+def flow(frame, slug, object_type, stats):
+    """
+    The directly-follows graph as a flow chart: how often, and how long.
+
+    Every other picture here is a model — it generalises, it invents gateways, it inserts silent steps to express a
+    branch. This one is a count: box A was followed by box B this many times. That makes it the only picture in the set
+    that cannot be wrong about the process, and the one to read first.
+
+    Two renderings from the same graph, because the frequent path and the slow path are rarely the same path.
+    """
+    files = {}
+
+    # How often each step occurs, handed to the drawing instead of left to be inferred.
+    #
+    # pm4py.save_vis_dfg does not forward this, and the visualizer then derives the counts from the EDGES. A step that
+    # only ever starts or ends a case has no edge, so it is missing from that dictionary and the drawing died with a
+    # KeyError on its name — and a process whose cases are one event long has no edges at all, which came out as
+    # "min() iterable argument is empty". Half the processes had no flow chart for those two reasons.
+    counts = frame["concept:name"].value_counts().to_dict()
+
+    def draw(variant, graph, starts, ends, name, extra=None):
+        # Only steps that actually appear in the graph may be marked as a start or an end.
+        #
+        # The visualizer builds its node map from the EDGES and then looks up every start and end activity in it, so a
+        # step that occurred exactly once, alone in its case, has no edge, is not in the map, and the drawing died with a
+        # KeyError on its name. That cost nine of nineteen processes their flow chart. Passing the occurrence counts does
+        # not help — the map is built from edges either way.
+        drawn = {activity for edge in graph for activity in edge}
+        dropped = sorted((set(starts) | set(ends)) - drawn)
+        if dropped:
+            stats.setdefault("flow_dropped_steps", []).append({"object_type": object_type, "steps": dropped})
+
+        parameters = {
+            "format": "svg",
+            "bgcolor": "white",
+            "rankdir": "LR",
+            "start_activities": {a: n for a, n in starts.items() if a in drawn},
+            "end_activities": {a: n for a, n in ends.items() if a in drawn},
+            "enable_graph_title": True,
+            "graph_title": object_type,
+            **(extra or {}),
+        }
+        gviz = dfg_visualizer.apply(graph, activities_count=counts, parameters=parameters, variant=variant)
+        dfg_visualizer.save(gviz, os.path.join(ARTIFACTS, name))
+
+    try:
+        graph, starts, ends = pm4py.discover_dfg(frame)
+        # Without a single edge there is no flow to draw: the picture would be a row of loose boxes, which says less
+        # than the step table above it already does.
+        if graph:
+            name = f"flow-{slug}.svg"
+            draw(dfg_visualizer.Variants.FREQUENCY, graph, starts, ends, name)
+            files["flow"] = name
+        else:
+            stats.setdefault("flow_skipped", []).append(
+                {"object_type": object_type, "reason": "kein Schritt folgt auf einen anderen"}
+            )
+    except Exception as error:
+        stats.setdefault("flow_errors", []).append({"object_type": object_type, "error": str(error)})
+
+    try:
+        # Working time, like every other duration in this tool: a step that waits over a weekend must not read as the
+        # slowest step in the process.
+        timed, starts, ends = pm4py.discover_performance_dfg(
+            frame, business_hours=True, business_hour_slots=BUSINESS_HOURS
+        )
+        if timed:
+            name = f"flow-time-{slug}.svg"
+            draw(
+                dfg_visualizer.Variants.PERFORMANCE, timed, starts, ends, name,
+                {"aggregation_measure": "median"},
+            )
+            files["flowTime"] = name
+    except Exception as error:
+        stats.setdefault("flow_errors", []).append({"object_type": object_type, "error": str(error)})
+
+    return files
 
 
 def bpmn(frame, slug, object_type, stats):

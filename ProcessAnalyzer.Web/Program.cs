@@ -194,6 +194,7 @@ app.MapSyncEndpoints();
 app.MapAnalyticsEndpoints();
 app.MapMiningEndpoints();
 app.MapVocabularyEndpoints();
+app.MapActorEndpoints();
 
 app.Run();
 return 0;

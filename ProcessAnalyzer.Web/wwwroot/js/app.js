@@ -3,6 +3,7 @@
 import { getSyncStatus, getHealth, getVersion, triggerRun, abortPolling } from './api.js';
 import { initInsights, renderInsights } from './insights.js';
 import { initViews } from './views.js';
+import { initTheme } from './theme.js';
 
 const REFRESH_MS = 5000;
 
@@ -179,6 +180,7 @@ function stopPolling() {
 }
 
 async function init() {
+  initTheme();
   $('refreshBtn').addEventListener('click', refresh);
   $('runBtn').addEventListener('click', () => run('pull'));
   $('sweepBtn').addEventListener('click', () => run('sweep'));

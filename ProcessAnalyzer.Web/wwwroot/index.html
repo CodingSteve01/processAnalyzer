@@ -6,6 +6,20 @@
   <title>Process Analyzer</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='5' cy='6' r='3'/><circle cx='19' cy='18' r='3'/><path d='M8 6h6a3 3 0 0 1 3 3v6'/></svg>">
   <link rel="stylesheet" href="styles.css" />
+  <!--
+    The theme, before the first paint. Inline and not in a module: a module is deferred, and a page that paints dark and
+    then turns light is worse than either. "system" is resolved here so the stylesheet needs one palette per theme rather
+    than one per theme and preference.
+  -->
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('pa-theme'); } catch (error) { stored = null; }
+      var wanted = stored === 'light' || stored === 'dark' ? stored
+        : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = wanted;
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -17,6 +31,7 @@
     <span class="topbar-sub">Was im Unternehmen tatsächlich passiert</span>
     <span class="spacer"></span>
     <span class="status-pill loading" id="healthPill">Lade …</span>
+    <button class="btn-icon" id="themeBtn" type="button" aria-label="Darstellung wechseln"></button>
     <button class="btn-icon" id="refreshBtn" type="button" title="Jetzt aktualisieren" aria-label="Jetzt aktualisieren">↻</button>
   </header>
 
@@ -152,6 +167,34 @@
       <h3>Wer übergibt an wen?</h3>
       <p class="reading" id="rRoleHandovers" hidden></p>
       <div id="roleHandovers"></div>
+
+      <h3>Freigabestufen: wer hält welche?</h3>
+      <p class="caveat">
+        Nichts davon ist aus einer Einstellung gelesen. Eine Stufe steht hier, weil sie jemand erteilt hat, die Rollen
+        sind die, die tatsächlich geklickt haben, und die Wartezeit ist die Zeit vom Schritt davor. Das beantwortet nicht,
+        wer freigeben DARF, sondern wer es tut. Verweigerungen sind getrennt gezählt, nicht abgezogen.
+      </p>
+      <p class="reading" id="rReleaseStages" hidden></p>
+      <div id="releaseStages"></div>
+
+      <h3>Wie die Freigaben aufeinander folgen</h3>
+      <p class="caveat">
+        Die Leiter, wie sie wirklich bestiegen wird — Paare ab drei Fällen. Wenn beide Richtungen eines Paares
+        auftauchen, sind die Stufen nicht wirklich geordnet. „dieselbe Person" zählt, wie oft beide Stufen von einer Hand
+        kamen.
+      </p>
+      <div id="releaseChain"></div>
+
+      <!-- The one place in the tool where the log cannot answer and a person can. -->
+      <h3>Mensch oder Automatik?</h3>
+      <p class="caveat">
+        Das Quellsystem sagt, über welchen Kanal ein Ereignis kam — als Benutzer, als Gerät, als geplanter Job. Das ist
+        keine Auskunft darüber, wer dahinter steckt: dieselbe Kennung kommt als Benutzer und als Gerät, weil ein Fahrer
+        vom Tablet bestätigt und am Schreibtisch korrigiert. Und ein technisches Konto, das über die Schnittstelle bucht,
+        sieht wie ein Mensch aus. Was hier korrigiert wird, gilt sofort für jede Quote „von Hand" und „ohne Menschen".
+      </p>
+      <p class="reading" id="rActors" hidden></p>
+      <div id="actors"></div>
     </section>
 
 

@@ -159,6 +159,33 @@ public static class AnalyticsEndpoints
             ) => repo.LandscapeAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
         );
         group.MapGet("/discovery/coverage", (DiscoveryRepository repo, CancellationToken t) => repo.CoverageAsync(t));
+        // Which process a step belongs to. Read once per screen so the combined pictures can be clicked into.
+        group.MapGet("/discovery/step-home", (DiscoveryRepository repo, CancellationToken t) => repo.StepHomeAsync(t));
+        // The release ladder: which stages exist, who holds them, and in which order they are actually climbed.
+        group.MapGet(
+            "/discovery/release-stages",
+            (
+                DiscoveryRepository repo,
+                string? from,
+                string? until,
+                string? group,
+                string? hasStep,
+                string? withoutStep,
+                CancellationToken t
+            ) => repo.ReleaseStagesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+        );
+        group.MapGet(
+            "/discovery/release-chain",
+            (
+                DiscoveryRepository repo,
+                string? from,
+                string? until,
+                string? group,
+                string? hasStep,
+                string? withoutStep,
+                CancellationToken t
+            ) => repo.ReleaseChainAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+        );
 
         group.MapPost(
             "/directory/sync",

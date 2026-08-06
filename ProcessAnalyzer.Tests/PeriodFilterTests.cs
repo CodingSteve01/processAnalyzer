@@ -140,6 +140,7 @@ public sealed class PeriodFilterTests
                    ('e3', 'doc:new', 'affected');
 
             REFRESH MATERIALIZED VIEW analytics.object_timeline;
+            REFRESH MATERIALIZED VIEW dim.actor_identity;
             REFRESH MATERIALIZED VIEW analytics.object_lifecycle;
             """,
             "{}"

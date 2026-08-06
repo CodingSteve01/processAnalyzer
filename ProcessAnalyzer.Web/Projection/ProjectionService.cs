@@ -149,6 +149,9 @@ public sealed class ProjectionService
         // finished from that process's end steps, and both of those are derived from the timeline. Refreshing the
         // lifecycle first would date it against the log it was built from.
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_timeline", ct);
+        // Who the actors are, before anything asks whether a person was involved. The lifecycle reads it through
+        // analytics.is_person, so a stale identity would date every automation figure by one run.
+        await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW dim.actor_identity", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.process_clock", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.derived_end_activity", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_lifecycle", ct);
