@@ -279,16 +279,29 @@ public sealed class DiscoveryRepository
                   AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
                 GROUP BY 1, 2
             ),
-            totals AS (SELECT event_type, sum(events) AS total FROM per_role GROUP BY 1)
+            totals AS (SELECT event_type, sum(events) AS total FROM per_role GROUP BY 1),
+            -- Where a step is most at home. A step belongs to a process before it belongs to a role, and without that
+            -- the row is a dead end: a reader who sees who does something cannot get to the cases it happened in.
+            home AS (
+                SELECT DISTINCT ON (t.event_type) t.event_type, t.object_type
+                FROM analytics.object_timeline t
+                WHERE (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                GROUP BY t.event_type, t.object_type
+                ORDER BY t.event_type, count(*) DESC
+            )
             SELECT analytics.label_activity(p.event_type)                       AS schritt,
                    p.role                                                       AS wer,
                    p.events                                                     AS wie_oft,
                    round(p.events::numeric / NULLIF(t.total, 0) * 100)          AS anteil_am_schritt,
                    -- More than one role doing the same step is either a shared responsibility or an unclear one,
                    -- and the difference is worth a look either way.
-                   (SELECT count(*) FROM per_role q WHERE q.event_type = p.event_type) AS rollen_am_schritt
+                   (SELECT count(*) FROM per_role q WHERE q.event_type = p.event_type) AS rollen_am_schritt,
+                   p.event_type                                                 AS schritt_key,
+                   h.object_type                                                AS prozess_key
             FROM per_role p
             JOIN totals t ON t.event_type = p.event_type
+            LEFT JOIN home h ON h.event_type = p.event_type
             ORDER BY t.total DESC, p.events DESC
             """,
             ct,

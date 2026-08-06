@@ -238,6 +238,7 @@ public sealed class AnalyticsRepository
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
               AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep))
             SELECT analytics.label_activity(f.event_type) AS event_type,
+                   f.event_type                                            AS event_type_key,
                    count(DISTINCT f.object_id)                             AS cases,
                    count(DISTINCT f.object_id) / (SELECT n FROM total)     AS case_share,
                    -- What the detour costs: those cases against the ones that never went wrong.
@@ -254,7 +255,7 @@ public sealed class AnalyticsRepository
                       AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
                       AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
             FROM flagged f
-            GROUP BY 1
+            GROUP BY 1, 2
             ORDER BY cases DESC
             """,
             ct,
@@ -741,12 +742,13 @@ public sealed class AnalyticsRepository
                 ORDER BY t.object_id, t.seq DESC
             )
             SELECT analytics.label_activity(s.event_type) AS last_activity,
+                   s.event_type AS last_activity_key,
                    count(*) AS cases,
                    count(*)::numeric / NULLIF(sum(count(*)) OVER (), 0) AS share,
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY l.duration_seconds) AS median_seconds
             FROM last_step s
             JOIN analytics.object_lifecycle l ON l.object_id = s.object_id
-            GROUP BY 1
+            GROUP BY 1, 2
             ORDER BY cases DESC
             """,
             ct,

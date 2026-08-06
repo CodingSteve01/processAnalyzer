@@ -108,6 +108,61 @@ public sealed class GroupScopeTests
         Assert.Empty(dropped);
     }
 
+    /// <summary>
+    /// Which panels name a step, and under which column their key travels.
+    /// </summary>
+    /// <remarks>
+    /// A label cannot be sent back as a filter: the path needs the technical key. A panel that renders a step name
+    /// without carrying its key is a dead end — the row is readable and leads nowhere, which is exactly the complaint
+    /// that collapsed nine screens into five. Two of these keys were missing when the tables moved under the process.
+    /// </remarks>
+    public static TheoryData<string, string> StepNamingPanels =>
+        new()
+        {
+            { "activities", "event_type_key" },
+            { "transitions", "to_activity_key" },
+            { "rework", "event_type_key" },
+            { "negative-outcomes", "event_type_key" },
+            { "automation-candidates", "event_type_key" },
+            { "endpoints", "last_activity_key" },
+        };
+
+    [Theory]
+    [MemberData(nameof(StepNamingPanels))]
+    public async Task PanelThatNamesAStep_CarriesItsKey(string panel, string keyColumn)
+    {
+        await SeedAsync();
+        var repo = new AnalyticsRepository(_postgres.Factory);
+
+        var rows = await RunAnalyticsAsync(repo, panel, Scope.Everything);
+
+        Assert.NotEmpty(rows);
+        foreach (var row in rows)
+        {
+            Assert.True(row.ContainsKey(keyColumn), $"{panel} nennt einen Schritt ohne {keyColumn}");
+            Assert.False(string.IsNullOrWhiteSpace(row[keyColumn]?.ToString()));
+        }
+    }
+
+    /// <summary>
+    /// The people screen has to reach the path, and a step alone cannot: a step is only addressable inside a process.
+    /// </summary>
+    [Fact]
+    public async Task WhoDoesWhat_LeadsToTheStepInItsProcess()
+    {
+        await SeedAsync();
+        var repo = new DiscoveryRepository(_postgres.Factory);
+
+        var rows = await repo.WhoDoesWhatAsync(Scope.Everything, CancellationToken.None);
+
+        Assert.NotEmpty(rows);
+        foreach (var row in rows)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(row["schritt_key"]?.ToString()));
+            Assert.Equal(ObjectType, row["prozess_key"]?.ToString());
+        }
+    }
+
     [Fact]
     public async Task GroupThatExists_KeepsItsCases()
     {

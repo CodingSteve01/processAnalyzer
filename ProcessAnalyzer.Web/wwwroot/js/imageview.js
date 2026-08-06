@@ -27,7 +27,7 @@ export function attachViewer(container, options = {}) {
     <span class="model-zoom-level">100 %</span>
     <button type="button" class="model-zoom" data-act="in" aria-label="Größer">+</button>
     <button type="button" class="model-zoom" data-act="natural">Lesegröße</button>
-    <button type="button" class="model-zoom" data-act="wide">Grosse Ansicht</button>
+    <button type="button" class="model-zoom" data-act="preview">Vorschau</button>
     <span class="spacer"></span>
     <span class="hint">Ziehen verschiebt, Strg + Mausrad zoomt.</span>`;
   container.parentNode.insertBefore(toolbar, container);
@@ -51,10 +51,9 @@ export function attachViewer(container, options = {}) {
       return;
     }
 
-    // In the large view at 100 % the picture fills the box in both directions rather than only its width. "As large as
-    // the container allows" is what somebody means by full size, and fitting the width alone leaves a wide graph tiny in
-    // a tall frame.
-    if (box().classList.contains('model-view-wide') && state.zoom === 1) {
+    // In the preview at 100 % the picture fills the window in both directions rather than only its width. Fitting the
+    // width alone leaves a wide graph small in a tall frame, which is the opposite of what a preview is for.
+    if (box().classList.contains('model-view-preview') && state.zoom === 1) {
       element.style.width = 'auto';
       element.style.height = 'auto';
       element.style.maxWidth = '100%';
@@ -96,12 +95,7 @@ export function attachViewer(container, options = {}) {
       state.natural = true;
       apply();
     }
-    if (act === 'wide') {
-      const wide = toggleWide(container);
-      event.target.closest('[data-act]').textContent = wide ? 'Kleine Ansicht' : 'Grosse Ansicht';
-      // Refit after the box changed width, or a fitted picture would stay at the old size inside a wider frame.
-      if (!state.natural) apply();
-    }
+    if (act === 'preview') openPreview(container, toolbar, options.title ?? 'Diagramm', apply);
   });
 
   // Ctrl + wheel only: the page scrolls with the wheel, and a picture that swallows that gesture traps the reader.
@@ -142,25 +136,67 @@ export function attachViewer(container, options = {}) {
 }
 
 /**
- * Makes the picture as large as the application allows, without leaving it.
+ * Opens the picture as a preview over the whole window, with a way out.
  *
- * Full screen was the obvious thing and the wrong one: it hides the tool around the picture, so the reader loses the
- * breadcrumbs, the scope line and the tabs — the context that says what they are looking at and how they got there. This
- * grows the box to the width of the window and most of its height, and everything else stays where it was.
+ * Three attempts at this. Full screen through the browser hid the application around the picture, so the reader lost the
+ * breadcrumbs and the scope line. A wider box inside the page barely changed anything, because the panel was already
+ * wide. What was actually meant is a preview: the picture over everything, as large as the window allows, and one
+ * obvious way to close it.
  *
- * @returns {boolean} whether the picture is now in the large view
+ * The viewer moves into the overlay rather than being rebuilt inside it — one instance, one zoom state, and the controls
+ * are the same ones the reader was already using.
  */
-function toggleWide(container) {
-  const box = container.closest('.model-view') ?? container;
-  return box.classList.toggle('model-view-wide');
+function openPreview(container, toolbar, title, apply) {
+  const overlay = document.createElement('div');
+  overlay.className = 'preview-overlay';
+  overlay.innerHTML = `
+    <div class="preview-head">
+      <span class="preview-title"></span>
+      <span class="preview-tools"></span>
+      <span class="spacer"></span>
+      <button type="button" class="preview-close" aria-label="Vorschau schliessen">×</button>
+    </div>
+    <div class="preview-body"></div>`;
+  overlay.querySelector('.preview-title').textContent = title;
+
+  // Placeholders remember where the two elements came from, so closing puts them back exactly rather than appending them
+  // to the end of whatever section happened to contain them.
+  const toolbarSlot = document.createComment('viewer-toolbar');
+  const containerSlot = document.createComment('viewer-container');
+  toolbar.parentNode.insertBefore(toolbarSlot, toolbar);
+  container.parentNode.insertBefore(containerSlot, container);
+
+  overlay.querySelector('.preview-tools').append(toolbar);
+  overlay.querySelector('.preview-body').append(container);
+  container.classList.add('model-view-preview');
+  document.body.append(overlay);
+  document.body.classList.add('preview-open');
+
+  const close = () => {
+    container.classList.remove('model-view-preview');
+    toolbarSlot.parentNode.insertBefore(toolbar, toolbarSlot);
+    containerSlot.parentNode.insertBefore(container, containerSlot);
+    toolbarSlot.remove();
+    containerSlot.remove();
+    overlay.remove();
+    document.body.classList.remove('preview-open');
+    document.removeEventListener('keydown', onKey);
+    apply();
+  };
+
+  const onKey = (event) => {
+    if (event.key === 'Escape') close();
+  };
+
+  overlay.querySelector('.preview-close').addEventListener('click', close);
+  // A click on the backdrop closes too, which is what every other preview in the world does. Clicks inside the picture
+  // must not, or dragging it would close it.
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) close();
+  });
+  document.addEventListener('keydown', onKey);
+
+  apply();
 }
 
-// Esc leaves the large view, because that is what Esc means everywhere else.
-document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape') return;
-  for (const box of document.querySelectorAll('.model-view-wide')) {
-    box.classList.remove('model-view-wide');
-    const button = box.parentNode.querySelector('[data-act="wide"]');
-    if (button) button.textContent = 'Grosse Ansicht';
-  }
-});
+
