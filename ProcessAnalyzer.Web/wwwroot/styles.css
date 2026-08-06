@@ -612,3 +612,105 @@ table.data tbody tr:hover { background: var(--bg-card); }
 .naming-failed .naming-input {
   border-color: var(--error);
 }
+
+/* --- drill-down ------------------------------------------------------------------------------------------------ */
+
+.drill-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+
+.crumb {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 1.05rem;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+.crumb:hover { background: var(--accent-dim); }
+
+/* Where the reader is now reads as a heading, not as another link. */
+.crumb.current {
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding-left: 0;
+}
+
+.crumb-sep { color: var(--text-muted); }
+
+/* At the top level the reader is choosing, and a choice reads better as tiles than as twenty rows of numbers. */
+.drill-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+
+.drill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.drill-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
+.drill-card-title { font-weight: 600; font-size: 1.05rem; }
+.drill-card-figure { font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.drill-card-figure small { font-size: 0.8rem; font-weight: 400; color: var(--text-muted); }
+.drill-card-line { color: var(--text); font-size: 0.85rem; }
+.drill-card-meta { color: var(--text-muted); font-size: 0.8rem; }
+
+/* The findings are the top of the page, because a sentence with a number in it is what somebody can act on. */
+.drill-findings {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.drill-findings li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  line-height: 1.45;
+}
+
+.drill-findings li.clickable { cursor: pointer; }
+.drill-findings li.clickable:hover { background: var(--bg-hover); }
+
+.drill-go {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+table.data tr.clickable { cursor: pointer; }
+table.data tr.clickable:hover { background: var(--bg-hover); }
+table.data tr.selected { background: var(--accent-dim); }

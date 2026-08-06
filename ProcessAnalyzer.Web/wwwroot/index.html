@@ -22,6 +22,10 @@
     how well does it run, what does it look like, and can I trust the data underneath.
   -->
   <nav class="viewnav" aria-label="Ansicht">
+    <button type="button" class="viewtab" data-view="prozesse">
+      <span class="viewtab-title">Prozesse</span>
+      <span class="viewtab-sub">Reinklicken, bis der Fall dasteht</span>
+    </button>
     <button type="button" class="viewtab active" data-view="ueberblick">
       <span class="viewtab-title">Überblick</span>
       <span class="viewtab-sub">Welche Prozesse gibt es?</span>
@@ -72,6 +76,21 @@
   <main class="main">
     <!-- Shown when the source is not configured or the last run failed. Hidden otherwise. -->
     <div class="banner" id="banner" hidden></div>
+
+    <!-- ========================= Prozesse (Drill-down) =========================
+      Ein Weg statt sieben Seiten: Prozess, Schritt darin, die Fälle dahinter, ein Fall, und aus jedem Schritt des
+      Falls wieder hinaus zu allen Fällen mit demselben Schritt. Der Pfad steht in der URL, damit der Zurück-Knopf des
+      Browsers der Weg zurück ist und ein Befund verschickt werden kann.
+    -->
+    <section class="panel view" data-view="prozesse" hidden aria-label="Prozesse">
+      <div class="panel-head">
+        <nav class="drill-crumbs" id="drillCrumbs" aria-label="Pfad"></nav>
+        <span class="spacer"></span>
+        <span class="hint" id="drillScope"></span>
+      </div>
+      <p class="reading" id="drillReading" hidden></p>
+      <div id="drillBody"></div>
+    </section>
 
     <!-- ========================= Überblick ========================= -->
     <section class="panel view" data-view="ueberblick" aria-label="Überblick">
