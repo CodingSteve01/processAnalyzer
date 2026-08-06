@@ -52,7 +52,7 @@ public sealed class CaseRepository
                    l.n_events                                            AS schritte,
                    l.first_ts                                            AS beginn,
                    l.last_ts                                             AS letzter_schritt,
-                   round((l.biz_seconds / 3600)::numeric, 1)             AS dauer_stunden,
+                   round((l.duration_seconds / 3600)::numeric, 1)        AS dauer_stunden,
                    analytics.label_activity(s.event_type)                AS steht_bei,
                    l.is_open                                             AS laeuft_noch
             FROM analytics.object_lifecycle l
@@ -99,7 +99,7 @@ public sealed class CaseRepository
                    analytics.person_with_role(t.actor_key)                         AS wer,
                    t.actor_kind                                                    AS art,
                    CASE WHEN t.prev_ts IS NULL THEN NULL
-                        ELSE round((analytics.biz_seconds(t.prev_ts, t.ts) / 3600)::numeric, 1) END AS wartezeit_stunden,
+                        ELSE round((analytics.duration_seconds(t.object_type, t.prev_ts, t.ts) / 3600)::numeric, 1) END AS wartezeit_stunden,
                    -- The other objects the same event touched. This is what an object-centric log can show and a
                    -- flattened one cannot: the document and the workflow that moved it are one event, not two.
                    (SELECT string_agg(analytics.label_object(o.type) || ' ' || split_part(o.id, ':', 2), ', ')
@@ -124,8 +124,8 @@ public sealed class CaseRepository
             WITH weekly AS (
                 SELECT date_trunc('week', l.first_ts)::date                          AS woche,
                        count(*)                                                      AS faelle,
-                       percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds)    AS p50,
-                       percentile_cont(0.95) WITHIN GROUP (ORDER BY l.biz_seconds)   AS p95,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY l.duration_seconds) AS p50,
+                       percentile_cont(0.95) WITHIN GROUP (ORDER BY l.duration_seconds) AS p95,
                        avg(l.n_events)                                               AS schritte,
                        count(*) FILTER (WHERE NOT l.has_human)::numeric / NULLIF(count(*), 0)   AS automatisch
                 FROM analytics.object_lifecycle l

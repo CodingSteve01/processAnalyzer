@@ -106,10 +106,10 @@ public sealed class AnalyticsRepository
         QueryAsync(
             """
             SELECT count(*)                                                              AS cases,
-                   percentile_cont(0.5)  WITHIN GROUP (ORDER BY biz_seconds)             AS p50_seconds,
-                   percentile_cont(0.8)  WITHIN GROUP (ORDER BY biz_seconds)             AS p80_seconds,
-                   percentile_cont(0.95) WITHIN GROUP (ORDER BY biz_seconds)             AS p95_seconds,
-                   max(biz_seconds)                                                      AS worst_seconds,
+                   percentile_cont(0.5)  WITHIN GROUP (ORDER BY duration_seconds)        AS p50_seconds,
+                   percentile_cont(0.8)  WITHIN GROUP (ORDER BY duration_seconds)        AS p80_seconds,
+                   percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_seconds)        AS p95_seconds,
+                   max(duration_seconds)                                                 AS worst_seconds,
                    avg(n_events)                                                         AS avg_steps,
                    sum(wall_seconds - biz_seconds) / NULLIF(sum(wall_seconds), 0)        AS outside_hours_share
             FROM analytics.object_lifecycle
@@ -144,8 +144,8 @@ public sealed class AnalyticsRepository
                    prev_type                            AS from_activity_key,
                    event_type                           AS to_activity_key,
                    count(*) AS n,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.biz_seconds(prev_ts, ts)) AS median_seconds,
-                   sum(analytics.biz_seconds(prev_ts, ts))                                         AS total_seconds
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.duration_seconds(object_type, prev_ts, ts)) AS median_seconds,
+                   sum(analytics.duration_seconds(object_type, prev_ts, ts))                       AS total_seconds
             FROM analytics.object_timeline
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
@@ -230,13 +230,13 @@ public sealed class AnalyticsRepository
                    count(DISTINCT f.object_id)                             AS cases,
                    count(DISTINCT f.object_id) / (SELECT n FROM total)     AS case_share,
                    -- What the detour costs: those cases against the ones that never went wrong.
-                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY biz_seconds)
+                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_seconds)
                     FROM analytics.object_lifecycle l
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
                       AND analytics.case_touched_by_group(l.object_id, @scopeGroup) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
-                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY biz_seconds)
+                   (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_seconds)
                     FROM analytics.object_lifecycle l
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
@@ -274,7 +274,7 @@ public sealed class AnalyticsRepository
                 GROUP BY object_id
             ),
             agg AS (
-                SELECT v.variant, count(*) AS n, avg(l.biz_seconds) AS avg_seconds
+                SELECT v.variant, count(*) AS n, avg(l.duration_seconds) AS avg_seconds
                 FROM v JOIN analytics.object_lifecycle l ON l.object_id = v.object_id
                 GROUP BY v.variant
             )
@@ -284,6 +284,78 @@ public sealed class AnalyticsRepository
             FROM agg
             ORDER BY n DESC
             LIMIT 20
+            """,
+            ct,
+            [("objectType", objectType), .. scope.Parameters()]
+        );
+
+    /// <summary>
+    /// What makes cases slow: for every step, how long the cases that contain it take compared with the ones that do
+    /// not.
+    /// </summary>
+    /// <remarks>
+    /// This is the difference between a dashboard and an answer. "The median is nine hours" is a fact nobody can act
+    /// on; "cases in which the release was discarded take four times as long, and that is 380 hours over these 57
+    /// cases" names a thing to change and what it is worth.
+    /// <para>
+    /// A comparison, not a correlation claim: the step may be a symptom rather than a cause, and the number says how
+    /// much time sits with it, not that removing it saves that time. Both groups need at least five cases, because a
+    /// median over three cases is an anecdote with a decimal point.
+    /// </para>
+    /// <para>
+    /// Only finished cases. A case still running has no duration yet, and counting it would pull every group towards
+    /// however long the log happens to be.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> DriversAsync(string objectType, Scope scope, CancellationToken ct) =>
+        QueryAsync(
+            """
+            WITH cases AS (
+                SELECT object_id, duration_seconds
+                FROM analytics.object_lifecycle
+                WHERE object_type = @objectType
+                  AND NOT is_open
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
+            ),
+            steps AS (
+                SELECT DISTINCT object_id, event_type
+                FROM analytics.object_timeline
+                WHERE object_type = @objectType
+            ),
+            matched AS (
+                SELECT a.event_type,
+                       EXISTS (SELECT 1 FROM steps s WHERE s.object_id = c.object_id AND s.event_type = a.event_type)
+                           AS hit,
+                       c.duration_seconds
+                FROM (SELECT DISTINCT event_type FROM steps) a
+                CROSS JOIN cases c
+            ),
+            per_group AS (
+                SELECT event_type,
+                       hit,
+                       count(*) AS n,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_seconds) AS median_seconds
+                FROM matched
+                GROUP BY 1, 2
+            )
+            SELECT analytics.label_activity(w.event_type)      AS event_type,
+                   w.event_type                                AS event_type_key,
+                   w.n                                         AS with_cases,
+                   o.n                                         AS without_cases,
+                   w.median_seconds                            AS median_with_seconds,
+                   o.median_seconds                            AS median_without_seconds,
+                   -- The whole point: how much time sits with this step across the cases that have it.
+                   (w.median_seconds - o.median_seconds) * w.n  AS extra_seconds
+            FROM per_group w
+            JOIN per_group o ON o.event_type = w.event_type AND NOT o.hit
+            WHERE w.hit
+              AND w.n >= 5
+              AND o.n >= 5
+              AND w.median_seconds > o.median_seconds
+            ORDER BY extra_seconds DESC
+            LIMIT 15
             """,
             ct,
             [("objectType", objectType), .. scope.Parameters()]
@@ -425,7 +497,7 @@ public sealed class AnalyticsRepository
             SELECT analytics.label_activity(s.event_type) AS last_activity,
                    count(*) AS cases,
                    count(*)::numeric / NULLIF(sum(count(*)) OVER (), 0) AS share,
-                   percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds) AS median_seconds
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY l.duration_seconds) AS median_seconds
             FROM last_step s
             JOIN analytics.object_lifecycle l ON l.object_id = s.object_id
             GROUP BY 1
