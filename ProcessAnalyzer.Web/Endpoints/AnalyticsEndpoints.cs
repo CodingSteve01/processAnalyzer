@@ -181,6 +181,24 @@ public static class AnalyticsEndpoints
             "/automation-candidates",
             (repo, type, scope, token) => repo.AutomationCandidatesAsync(type, scope, token)
         );
+        // The three screens that look at now rather than backwards. Everything else in this tool is a retrospective,
+        // which is useful in a workshop and useless at ten in the morning.
+        group.MapGet(
+            "/queue",
+            async (AnalyticsRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                Results.Ok(new { rows = await repo.QueueAsync(Scope.FromQuery(from, until, group), t) })
+        );
+        group.MapGet(
+            "/anomalies",
+            async (AnalyticsRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                Results.Ok(new { rows = await repo.AnomaliesAsync(Scope.FromQuery(from, until, group), t) })
+        );
+        group.MapGet(
+            "/four-eyes",
+            async (AnalyticsRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                Results.Ok(new { rows = await repo.FourEyesAsync(Scope.FromQuery(from, until, group), t) })
+        );
+
         // One person, at the level of the step. Not through MapScoped: there is no object type here, a person works
         // across processes.
         group.MapGet(

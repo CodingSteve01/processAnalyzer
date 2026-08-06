@@ -301,6 +301,160 @@ public sealed class AnalyticsRepository
     }
 
     /// <summary>
+    /// What is waiting right now, and for how long.
+    /// </summary>
+    /// <remarks>
+    /// Everything else in this tool looks backwards. This looks at the desk: which cases are standing at which step, how
+    /// long they have been standing there, and who touched them last. It is the one screen somebody can act on before
+    /// lunch rather than in the next process workshop.
+    /// <para>
+    /// Only open cases, and the age is measured against the newest event in the log rather than the wall clock: a mirror
+    /// that stopped pulling an hour ago must not report every case as an hour more urgent than it is.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> QueueAsync(Scope scope, CancellationToken ct) =>
+        QueryAsync(
+            """
+            WITH latest AS (SELECT max(ts) AS now FROM ocel.event)
+            SELECT analytics.label_object(l.object_type)          AS prozess,
+                   l.object_type                                  AS prozess_key,
+                   analytics.label_activity(l.last_activity)      AS steht_bei,
+                   l.last_activity                                AS steht_bei_key,
+                   count(*)                                       AS faelle,
+                   round(
+                       (EXTRACT(EPOCH FROM ((SELECT now FROM latest) - max(l.last_ts))) / 3600)::numeric, 1
+                   )                                              AS juengster_stunden,
+                   round(
+                       (EXTRACT(EPOCH FROM ((SELECT now FROM latest) - min(l.last_ts))) / 3600)::numeric, 1
+                   )                                              AS aeltester_stunden,
+                   round(
+                       (percentile_cont(0.5) WITHIN GROUP (
+                           ORDER BY EXTRACT(EPOCH FROM ((SELECT now FROM latest) - l.last_ts))
+                       ) / 3600)::numeric, 1
+                   )                                              AS median_stunden
+            FROM analytics.object_lifecycle l
+            WHERE l.is_open
+              AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(l.object_id, @scopeGroup)
+            GROUP BY 1, 2, 3, 4
+            HAVING count(*) > 0
+            ORDER BY sum(EXTRACT(EPOCH FROM ((SELECT now FROM latest) - l.last_ts))) DESC
+            LIMIT 40
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>
+    /// Cases whose timing is out of the ordinary: a step that took far longer than the same step usually does.
+    /// </summary>
+    /// <remarks>
+    /// The aggregates say where time goes on average. This says which single case went wrong, which is the question a
+    /// dispatcher has. Per transition it takes the mean and the spread over all cases and reports the ones beyond three
+    /// standard deviations — the textbook line, and above it a case is not slow, it is different.
+    /// <para>
+    /// A transition needs at least twenty observations before it gets an opinion about what is normal. Below that the
+    /// spread is noise and every second case looks like an outlier.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> AnomaliesAsync(Scope scope, CancellationToken ct) =>
+        QueryAsync(
+            """
+            WITH gap AS (
+                SELECT t.object_type,
+                       t.object_id,
+                       t.prev_type,
+                       t.event_type,
+                       t.ts,
+                       analytics.duration_seconds(t.object_type, t.prev_ts, t.ts) AS seconds
+                FROM analytics.object_timeline t
+                WHERE t.prev_type IS NOT NULL
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
+            ),
+            norm AS (
+                SELECT object_type, prev_type, event_type,
+                       count(*)          AS n,
+                       avg(seconds)      AS mittel,
+                       stddev_pop(seconds) AS streuung
+                FROM gap
+                GROUP BY 1, 2, 3
+                HAVING count(*) >= 20 AND stddev_pop(seconds) > 0
+            )
+            SELECT analytics.label_object(g.object_type)                         AS prozess,
+                   g.object_type                                                AS prozess_key,
+                   split_part(g.object_id, ':', 2)                              AS nummer,
+                   g.object_id                                                  AS schluessel,
+                   analytics.label_activity(g.prev_type)                        AS von,
+                   analytics.label_activity(g.event_type)                       AS bis,
+                   g.event_type                                                 AS bis_key,
+                   round((g.seconds / 3600)::numeric, 1)                        AS stunden,
+                   round((n.mittel / 3600)::numeric, 1)                         AS ueblich_stunden,
+                   round(((g.seconds - n.mittel) / n.streuung)::numeric, 1)      AS sigma,
+                   g.ts                                                         AS wann
+            FROM gap g
+            JOIN norm n
+              ON n.object_type = g.object_type AND n.prev_type = g.prev_type AND n.event_type = g.event_type
+            WHERE g.seconds > n.mittel + 3 * n.streuung
+            ORDER BY (g.seconds - n.mittel) / n.streuung DESC
+            LIMIT 30
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>
+    /// Where the same person submitted and decided.
+    /// </summary>
+    /// <remarks>
+    /// Four eyes, checked against what happened rather than against what the configuration allows. Not an accusation:
+    /// most of these are a small amount that nobody else was around for, and the rule may not even apply. But it is a
+    /// list somebody has to have seen, and it cannot be produced from the settings — only from the log.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> FourEyesAsync(Scope scope, CancellationToken ct) =>
+        QueryAsync(
+            """
+            WITH decided AS (
+                SELECT t.object_type, t.object_id, t.actor_key, t.event_type, t.ts, t.event_id
+                FROM analytics.object_timeline t
+                WHERE t.actor_kind = 'human'
+                  AND (t.raw_event_type LIKE '%approved%' OR t.raw_event_type LIKE '%granted%'
+                       OR t.raw_event_type LIKE '%released%')
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
+            ),
+            first_touch AS (
+                SELECT DISTINCT ON (t.object_id) t.object_id, t.actor_key, t.event_type, t.event_id
+                FROM analytics.object_timeline t
+                WHERE t.actor_kind = 'human'
+                ORDER BY t.object_id, t.seq
+            )
+            SELECT analytics.label_object(d.object_type)     AS prozess,
+                   d.object_type                             AS prozess_key,
+                   analytics.person(d.actor_key)             AS person,
+                   analytics.label_activity(f.event_type)    AS eingereicht_mit,
+                   analytics.label_activity(d.event_type)    AS entschieden_mit,
+                   count(*)                                  AS faelle,
+                   max(d.ts)                                 AS zuletzt
+            FROM decided d
+            JOIN first_touch f
+              ON f.object_id = d.object_id
+             AND f.actor_key = d.actor_key
+             -- Not the same event. Otherwise every case whose first human step happens to be the approval shows up, and
+             -- "the person who approved it also approved it" is not a finding.
+             AND f.event_id <> d.event_id
+            GROUP BY 1, 2, 3, 4, 5
+            ORDER BY count(*) DESC
+            LIMIT 25
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>
     /// What one person actually does: their steps, by process, with how often and in how many cases.
     /// </summary>
     /// <remarks>
