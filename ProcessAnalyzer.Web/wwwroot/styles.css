@@ -949,3 +949,17 @@ table.data tr.selected { background: var(--accent-dim); }
   align-items: center;
   justify-content: center;
 }
+
+/* A step from another part of the transaction: indented, so the case's own sequence stays readable inside it. */
+.chain-other { padding-left: 28px !important; color: var(--text-muted); }
+
+/* The state of a process when there is nothing to measure yet. A sentence, not four tiles full of dashes. */
+.drill-state {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 8px 0 16px;
+  line-height: 1.5;
+}

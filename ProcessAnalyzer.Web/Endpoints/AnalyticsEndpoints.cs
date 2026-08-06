@@ -130,6 +130,14 @@ public static class AnalyticsEndpoints
                     )
         );
 
+        // The whole transaction around one case: its own steps plus those of everything it touches. An object-centric
+        // log has no single case by design, and this is where a person needs one anyway.
+        group.MapGet(
+            "/case/{objectId}/chain",
+            async (CaseRepository repo, string objectId, CancellationToken t) =>
+                Results.Ok(new { objectId, rows = await repo.ChainAsync(objectId, t) })
+        );
+
         group.MapGet(
             "/case/{objectId}",
             async (CaseRepository repo, string objectId, CancellationToken t) =>

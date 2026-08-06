@@ -125,11 +125,7 @@ async function renderProcesses() {
   // the same list as a choice.
   const landscape = rows.length
     ? `<h3>Die Landschaft</h3>
-       <p class="caveat">
-         Wer gibt wem Arbeit. Eine Kante ist ein Ereignis, das zwei Arten von Objekt gleichzeitig berührt, die Dicke ist
-         die Menge, die Richtung kommt daraus, welcher Fall zuerst begonnen hat. Gestrichelt heisst: die Reihenfolge
-         wechselt von Fall zu Fall. Ein Klick auf einen Kasten öffnet den Ablauf.
-       </p>
+       <p class="caveat">Wer gibt wem Arbeit. Klick auf einen Kasten öffnet den Ablauf.</p>
        <div class="model-view model-view-inline" id="drillLandscape"></div>
        <div class="chart-readout" id="drillLandscapeReadout"></div>
        <h3>Die Abläufe im Einzelnen</h3>`
@@ -205,32 +201,37 @@ async function renderProcess(process) {
   $('drillReading').hidden = true;
   $('drillBody').innerHTML = `
     ${summaryTiles(summary, inventoryRow)}
-    <h3>Was auffällt</h3>
+
+    <section id="drillDiagramSection" hidden>
+      <h3>Der Ablauf</h3>
+      <div id="drillDiagram"></div>
+    </section>
+
     ${
       findings.length
-        ? `<ul class="drill-findings">${findings
-            .map(
-              (finding, index) =>
-                `<li${finding.step ? ` class="clickable" data-finding="${index}"` : ''}>${escape(finding.text)}${
-                  finding.step ? '<span class="drill-go">ansehen ›</span>' : ''
-                }</li>`
-            )
-            .join('')}</ul>`
-        : '<p class="empty">Zu wenige abgeschlossene Fälle für eine Aussage.</p>'
+        ? `<h3>Was auffällt</h3>
+           <ul class="drill-findings">${findings
+             .map(
+               (finding, index) =>
+                 `<li${finding.step ? ` class="clickable" data-finding="${index}"` : ''}>${escape(finding.text)}${
+                   finding.step ? '<span class="drill-go">ansehen ›</span>' : ''
+                 }</li>`
+             )
+             .join('')}</ul>`
+        : ''
     }
 
     <h3>Die Schritte</h3>
     <p class="caveat">Ein Klick auf einen Schritt zeigt die Fälle, die durch ihn gelaufen sind.</p>
     ${stepTable(rowsOf(activities))}
 
-    <h3>Wie es sich entwickelt</h3>
-    <p class="caveat">Fälle je Woche und Median der Durchlaufzeit. Ohne den Verlauf ist jede Zahl oben ein Standbild.</p>
-    <div class="chart-box"><svg id="drillTrend" preserveAspectRatio="none"></svg></div>
-    <div class="chart-legend" id="drillTrendLegend"></div>
+    <section id="drillTrendSection" hidden>
+      <h3>Verlauf je Woche</h3>
+      <div class="chart-box"><svg id="drillTrend" preserveAspectRatio="none"></svg></div>
+      <div class="chart-legend" id="drillTrendLegend"></div>
+    </section>
 
-    <h3>Der Ablauf als Bild</h3>
-    <p class="caveat">Gerechnet mit pm4py, Hauptpfade ohne die Einmal-Wege. Der Reiter „Diagramme" zeigt dasselbe grösser.</p>
-    <div id="drillDiagram"></div>`;
+    <p class="hint" id="drillGaps"></p>`;
 
   // Both are additions to a level that already stands, so they load after it and their absence costs a picture rather
   // than the page.
@@ -251,6 +252,18 @@ function summaryTiles(summary, inventoryRow) {
   if (!summary) return '';
   const all = inventoryRow ? Number(inventoryRow.objects) : null;
   const closed = Number(summary.cases ?? 0);
+
+  // Percentiles need finished cases. Three dashes in a row are a placeholder pretending to be a figure, so the state
+  // gets one sentence and the tiles stay away until there is something in them.
+  if (!closed) {
+    return `
+      <p class="drill-state">
+        ${all === null ? '' : `<strong>${nf.format(all)} Fälle</strong>, alle noch offen. `}
+        Durchlaufzeiten entstehen erst, wenn Fälle abgeschlossen sind: entweder mit einem Endschritt dieses Ablaufs oder
+        nach längerer Stille.
+      </p>`;
+  }
+
   return `
     <div class="stats-grid">
       <div class="stat-card"><h3>Fälle</h3><div class="metric-value">${all === null ? '—' : nf.format(all)}</div>
@@ -456,7 +469,10 @@ function caseTable(rows) {
 // ── level 3: this one case ────────────────────────────────────────────────────────────────────────────────────────
 
 async function renderCase(process, step, caseId) {
-  const response = await request(`/api/case/${encodeURIComponent(caseId)}`);
+  const [response, chain] = await Promise.all([
+    request(`/api/case/${encodeURIComponent(caseId)}`),
+    request(`/api/case/${encodeURIComponent(caseId)}/chain`),
+  ]);
   const key = caseId.split(':')[1] ?? caseId;
   names.case = key;
   renderCrumbs(path());
@@ -478,6 +494,8 @@ async function renderCase(process, step, caseId) {
       „davor" ist die Wartezeit vor dem Schritt, in Arbeitszeit — die Frage ist ja, wo die Zeit hingeht. Ein Klick auf
       einen Schritt zeigt alle Fälle, die denselben Schritt hatten.
     </p>
+    ${chainSection(rowsOf(chain))}
+    <h4>Nur dieser Fall</h4>
     ${
       steps.length
         ? `<table class="data">
@@ -502,7 +520,17 @@ async function renderCase(process, step, caseId) {
         : '<p class="empty">Keine Schritte zu diesem Fall.</p>'
     }`;
 
-  for (const row of $('drillBody').querySelectorAll('tr[data-step]')) {
+  for (const row of $('drillBody').querySelectorAll('tr[data-chain]')) {
+    row.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (row.dataset.chain === caseId) return;
+      names.case = null;
+      names.step = row.dataset.label;
+      goTo({ process: row.dataset.process, step: row.dataset.step, case: row.dataset.chain });
+    });
+  }
+
+  for (const row of $('drillBody').querySelectorAll('tr[data-step]:not([data-chain])')) {
     row.addEventListener('click', () => {
       names.step = row.dataset.label;
       names.case = null;
@@ -556,11 +584,12 @@ async function drawProcessTrend(process) {
   if (!host) return;
 
   if (rows.length < 2) {
-    host.closest('.chart-box').innerHTML =
-      '<p class="empty">Zu wenige Wochen für einen Verlauf. Der Spiegel reicht noch nicht weit genug zurück.</p>';
-    $('drillTrendLegend').innerHTML = '';
+    // Nothing to draw, so nothing is shown. The absence is noted once at the bottom of the page.
+    noteGap('für einen Wochenverlauf reicht der Spiegel noch nicht weit zurück');
     return;
   }
+
+  $('drillTrendSection').hidden = false;
 
   const dayFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' });
   const legend = drawLineChart(
@@ -591,9 +620,11 @@ async function showProcessDiagram(process, label) {
   const model = file ? available.find((candidate) => candidate.name === file) : null;
 
   if (!model) {
-    host.innerHTML = '<p class="empty">Für diesen Ablauf wurde noch kein Diagramm gerechnet.</p>';
+    noteGap('für diesen Ablauf ist noch kein Diagramm gerechnet');
     return;
   }
+
+  $('drillDiagramSection').hidden = false;
 
   // Inlined rather than shown as an image, because an image cannot be clicked. The boxes carry the same German labels
   // the tables use — we generate both — so each one can be matched back to a step and lead into it.
@@ -808,4 +839,64 @@ async function renderActor(actorKey) {
       goTo({ process: row.dataset.process, step: row.dataset.step });
     });
   }
+}
+
+/**
+ * The whole transaction: this case and everything it touches, on one timeline.
+ *
+ * An object-centric log has no single case, and that is the right model — an order, its tour, its papers and its
+ * accounting rows each have a life of their own. But the question somebody asks about an order is what happened with
+ * this order, and the answer spans all of them. So the case keeps its own table below, and this is the sequence a person
+ * would tell: created, planned onto a tour, papers back from the driver, filed, reconciled.
+ */
+function chainSection(rows) {
+  if (rows.length < 2) return '';
+
+  const parts = new Map();
+  for (const row of rows) parts.set(row.schluessel, row.gehoert_zu);
+  if (parts.size < 2) return '';
+
+  const involved = [...new Set(rows.map((row) => row.gehoert_zu))];
+
+  return `
+    <h4>Der ganze Vorgang</h4>
+    <p class="caveat">
+      Dieser Fall und alles, was ihn berührt: ${escape(involved.join(', '))}. Ein Schritt aus einem anderen Teil des
+      Vorgangs ist eingerückt und führt beim Klick dorthin.
+    </p>
+    <table class="data">
+      <thead><tr><th>gehört zu</th><th>Nummer</th><th>Was</th><th>Wann</th><th>Wer</th><th></th></tr></thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+          <tr class="clickable${row.ist_dieser_fall ? ' selected' : ''}"
+              data-chain="${escape(row.schluessel)}" data-process="${escape(row.prozess_key)}"
+              data-step="${escape(row.was_key)}" data-label="${escape(row.was)}">
+            <td>${escape(row.gehoert_zu)}</td>
+            <td>${escape(row.nummer ?? '')}</td>
+            <td${row.ist_dieser_fall ? '' : ' class="chain-other"'}>${escape(row.was)}</td>
+            <td>${moment(row.wann)}</td>
+            <td>${escape(row.wer ?? '—')}</td>
+            <td class="num">${row.ist_dieser_fall ? '' : '<span class="drill-go">öffnen ›</span>'}</td>
+          </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
+}
+
+/**
+ * Collects what this level could not show, as one line at the bottom.
+ *
+ * The alternative was a heading, an explanation and an empty box per missing thing, which is how a working tool starts to
+ * read like a demo with placeholders. What is missing still has to be said — silence would leave the reader believing
+ * they have seen everything — but it belongs in one quiet sentence, not in three holes in the middle of the page.
+ */
+function noteGap(text) {
+  const host = $('drillGaps');
+  if (!host) return;
+  const gaps = host.dataset.gaps ? `${host.dataset.gaps}; ${text}` : text;
+  host.dataset.gaps = gaps;
+  host.textContent = `Nicht dargestellt: ${gaps}.`;
 }
