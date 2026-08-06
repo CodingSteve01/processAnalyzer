@@ -10,7 +10,7 @@
 // carries a case at all. A report that hides that invites conclusions the data does not carry.
 
 import { request } from './api.js';
-import { periodQuery, periodLabel } from './period.js';
+import { periodQuery, periodLabel, scopeQuery } from './period.js';
 import { $, escape } from './utils.js';
 
 const nf = new Intl.NumberFormat('de-DE');
@@ -35,7 +35,7 @@ export async function renderReport() {
   const [processes, health, inventory] = await Promise.all([
     request(`/api/discovery/processes${periodQuery() ? `?${periodQuery().slice(1)}` : ''}`),
     request('/health'),
-    request('/api/inventory'),
+    request(`/api/inventory${scopeQuery()}`),
   ]);
 
   const top = rowsOf(processes)

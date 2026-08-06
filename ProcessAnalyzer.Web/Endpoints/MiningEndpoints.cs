@@ -21,7 +21,7 @@ public static class MiningEndpoints
     /// the directory is shared with another container and a path fragment would turn this into a file-read primitive.
     /// </summary>
     private static readonly System.Text.RegularExpressions.Regex ProcessModel = new(
-        @"^process-[a-z0-9-]{1,60}-(frequency|performance|main)\.svg$",
+        @"^(process-[a-z0-9-]{1,60}-(frequency|performance|main)|bpmn-[a-z0-9-]{1,60})\.svg$",
         System.Text.RegularExpressions.RegexOptions.Compiled
     );
 
@@ -31,7 +31,7 @@ public static class MiningEndpoints
     private static IEnumerable<string> KnownModels(string directory)
     {
         var found = Directory
-            .EnumerateFiles(directory, "process-*.svg")
+            .EnumerateFiles(directory, "*.svg")
             .Select(Path.GetFileName)
             .OfType<string>()
             .Where(name => ProcessModel.IsMatch(name))

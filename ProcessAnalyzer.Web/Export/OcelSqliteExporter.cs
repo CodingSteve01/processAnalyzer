@@ -172,12 +172,18 @@ public sealed class OcelSqliteExporter
         foreach (var (_, suffix) in suffixes)
             Execute(
                 target,
+                // The actor travels with the event as an OCEL attribute. Without it the classical analyses in the miner
+                // cannot say who did anything: batch detection needs a resource, and "this happens in bursts" without
+                // saying whose bursts is not something anybody can act on.
                 $"CREATE TABLE event_{suffix} (ocel_id TEXT PRIMARY KEY, ocel_time TEXT, "
-                    + "FOREIGN KEY (ocel_id) REFERENCES event (ocel_id))"
+                    + "\"org:resource\" TEXT, FOREIGN KEY (ocel_id) REFERENCES event (ocel_id))"
             );
 
         await using var command = source.CreateCommand();
-        command.CommandText = "SELECT e.id, " + EventLabel + ", e.ts FROM ocel.event e ORDER BY e.ts, e.id";
+        command.CommandText =
+            "SELECT e.id, "
+            + EventLabel
+            + ", e.ts, analytics.person(e.actor_key) FROM ocel.event e ORDER BY e.ts, e.id";
         await using var reader = await command.ExecuteReaderAsync(ct);
 
         using var insertCore = target.CreateCommand();
@@ -197,10 +203,15 @@ public sealed class OcelSqliteExporter
             insertCore.Parameters["$type"].Value = type;
             insertCore.ExecuteNonQuery();
 
+            // Named or pseudonymised exactly as on screen: the export must not be a way around the identity setting.
+            var actor = await reader.IsDBNullAsync(3, ct) ? null : reader.GetString(3);
+
             using var insertTyped = target.CreateCommand();
-            insertTyped.CommandText = $"INSERT INTO event_{suffixes[type]} (ocel_id, ocel_time) VALUES ($id, $ts)";
+            insertTyped.CommandText =
+                $"INSERT INTO event_{suffixes[type]} (ocel_id, ocel_time, \"org:resource\") VALUES ($id, $ts, $actor)";
             insertTyped.Parameters.AddWithValue("$id", id);
             insertTyped.Parameters.AddWithValue("$ts", timestamp);
+            insertTyped.Parameters.AddWithValue("$actor", (object?)actor ?? DBNull.Value);
             insertTyped.ExecuteNonQuery();
             count++;
         }

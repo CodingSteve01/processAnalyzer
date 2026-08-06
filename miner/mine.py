@@ -91,11 +91,149 @@ def discover_per_process(ocel, minable, stats):
                                  act_threshold=2, edge_threshold=2, graph_title=object_type)
             files["main"] = main
 
+            # The classical analyses run on the flattened log of this one process. They are what pm4py is actually full
+            # of, and the tool used three functions out of two hundred and seventy.
+            frame = flatten(ocel, object_type)
+            bpmn_file = bpmn(frame, slug, object_type, stats)
+            if bpmn_file:
+                files["bpmn"] = bpmn_file
+
+            rule_result = rules(frame, object_type, stats)
+            if rule_result:
+                stats.setdefault("rules", []).append(rule_result)
+
+            batch_result = batches(frame, object_type, stats)
+            if batch_result:
+                stats.setdefault("batches", []).append(batch_result)
+
             processes.append({"object_type": object_type, "slug": slug, "files": files})
         except Exception as error:  # one unminable process must not cost the other nineteen their diagrams
             processes.append({"object_type": object_type, "slug": slug, "error": str(error)})
             stats.setdefault("process_errors", []).append({"object_type": object_type, "error": str(error)})
     return processes
+
+
+def flatten(ocel, object_type):
+    """
+    One object type as a classical case log.
+
+    The object-centric functions in pm4py are three; the classical ones are dozens, and they are the ones that answer
+    "which rule does this process break" and "what is done in batches". Flattening loses the connections between object
+    types, which is exactly why the landscape and the OC-DFG exist next to this — here it is the right trade, because a
+    rule about one process does not need the others.
+    """
+    frame = pm4py.ocel_flattening(ocel, object_type)
+    # A resource column is optional in OCEL and required by the batch detection. Absent it, batches would be reported per
+    # activity only, which says "this happens in bursts" without saying who is bursting.
+    if "ocel:attr:actor" in frame.columns and "org:resource" not in frame.columns:
+        frame = frame.rename(columns={"ocel:attr:actor": "org:resource"})
+    return frame
+
+
+def bpmn(frame, slug, object_type, stats):
+    """
+    A BPMN diagram per process.
+
+    The Petri net was the wrong picture for anybody outside this repository: its round nodes are states and carry no
+    label by definition, and its unlabelled boxes are silent transitions the miner inserts to express branching. Neither
+    corresponds to anything a dispatcher does. BPMN says the same thing in the notation their process documentation is
+    already written in.
+    """
+    try:
+        model = pm4py.discover_bpmn_inductive(frame, noise_threshold=0.2)
+        name = f"bpmn-{slug}.svg"
+        pm4py.save_vis_bpmn(model, os.path.join(ARTIFACTS, name), graph_title=object_type)
+        return name
+    except Exception as error:
+        stats.setdefault("bpmn_errors", []).append({"object_type": object_type, "error": str(error)})
+        return None
+
+
+def rules(frame, object_type, stats):
+    """
+    The rules this process keeps, and the cases that break them.
+
+    Learned from the log rather than configured: what always precedes what, what never occurs together, how often an
+    activity may occur. A violation is not automatically a defect — the rule was inferred from behaviour, so a rare but
+    legitimate path shows up as one. It is a list worth reading, and nothing here produced it before.
+
+    The noise threshold is what keeps one unusual case from erasing a rule that a thousand others keep.
+    """
+    kinds = {
+        "never_together": "kommen nie zusammen vor",
+        "always_before": "muss vorher passieren",
+        "always_after": "muss danach passieren",
+        "equivalence": "kommen gleich oft vor",
+        "directly_follows": "folgt direkt auf",
+        "activ_freq": "unerwartete Anzahl",
+    }
+
+    try:
+        skeleton = pm4py.discover_log_skeleton(frame, noise_threshold=0.05)
+        results = pm4py.conformance_log_skeleton(frame, skeleton)
+    except Exception as error:
+        stats.setdefault("rule_errors", []).append({"object_type": object_type, "error": str(error)})
+        return None
+
+    # A case counts as violating when the diagnostics say so. The first version of this read the fitness column of the
+    # dataframe form and reported every case as a violation — 85 of 85 where the truth was 2, which is worse than no
+    # analysis at all.
+    broken = [row for row in results if isinstance(row, dict) and row.get("no_dev_total", 0) > 0]
+    if not broken:
+        return {"object_type": object_type, "cases": 0, "checked": len(results), "violations": []}
+
+    counts = {}
+    for row in broken:
+        for deviation in row.get("deviations", []) or []:
+            kind = deviation[0] if isinstance(deviation, (list, tuple)) and deviation else "unbekannt"
+            detail = deviation[1] if isinstance(deviation, (list, tuple)) and len(deviation) > 1 else ""
+            # The payload is nested and its shape depends on the rule type, so it is rendered here where the shape is
+            # known rather than parsed again on the other side.
+            pairs = []
+            if isinstance(detail, (list, tuple, set)):
+                for item in list(detail)[:2]:
+                    pairs.append(" / ".join(str(x) for x in item) if isinstance(item, (list, tuple)) else str(item))
+            key = (kinds.get(str(kind), str(kind)), "; ".join(pairs))
+            counts[key] = counts.get(key, 0) + 1
+
+    return {
+        "object_type": object_type,
+        "checked": len(results),
+        "cases": len(broken),
+        "violations": [
+            {"regel": kind, "betrifft": detail, "faelle": count}
+            for (kind, detail), count in sorted(counts.items(), key=lambda kv: -kv[1])[:6]
+        ],
+    }
+
+
+def batches(frame, object_type, stats):
+    """
+    Work done in bursts rather than as it arrives.
+
+    A dispatcher who signs off twenty papers at four in the afternoon is not slow, they are batching, and the two look
+    identical in an average. It matters because a batch is a queue somebody built on purpose, and the waiting inside it is
+    the part nobody sees.
+    """
+    if "org:resource" not in frame.columns:
+        return None
+
+    try:
+        found = pm4py.discover_batches(frame, merge_distance=900, min_batch_size=3)
+    except Exception as error:
+        stats.setdefault("batch_errors", []).append({"object_type": object_type, "error": str(error)})
+        return None
+
+    rows = []
+    for (activity, resource), count, detail in found[:10]:
+        kinds = sorted(detail.keys()) if isinstance(detail, dict) else []
+        rows.append({
+            "schritt": activity,
+            "person": resource,
+            "stapel": int(count),
+            "art": ", ".join(kinds),
+        })
+    return {"object_type": object_type, "batches": rows} if rows else None
 
 
 def slugify(name):

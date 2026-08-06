@@ -14,21 +14,35 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// </remarks>
 /// <param name="Period">The window on the case start.</param>
 /// <param name="Group">A group name from the source directory, or <c>null</c> for everybody.</param>
-public sealed record Scope(Period Period, string? Group)
+/// <param name="HasStep">Only cases that went through this step at some point, or <c>null</c>.</param>
+/// <param name="WithoutStep">Only cases that never went through this step, or <c>null</c>.</param>
+public sealed record Scope(Period Period, string? Group, string? HasStep = null, string? WithoutStep = null)
 {
     /// <summary>No filter at all — every case, everybody.</summary>
     public static Scope Everything { get; } = new(Period.All, null);
 
-    /// <summary>Reads a scope off the query string. An empty or blank group is no group, not a group called "".</summary>
-    public static Scope FromQuery(string? from, string? until, string? group) =>
-        new(Period.FromQuery(from, until), string.IsNullOrWhiteSpace(group) ? null : group.Trim());
+    /// <summary>Reads a scope off the query string. An empty or blank value is no filter, not a filter on "".</summary>
+    public static Scope FromQuery(
+        string? from,
+        string? until,
+        string? group,
+        string? hasStep = null,
+        string? withoutStep = null
+    ) => new(Period.FromQuery(from, until), Trimmed(group), Trimmed(hasStep), Trimmed(withoutStep));
+
+    private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// Every parameter the scope predicates expect. Always bound, so the SQL text never varies by request and the
     /// plan cache is not split between filtered and unfiltered calls.
     /// </summary>
     public (string Name, object Value)[] Parameters() =>
-        [.. Period.Parameters(), ("scopeGroup", Group is null ? DBNull.Value : Group)];
+        [
+            .. Period.Parameters(),
+            ("scopeGroup", Group is null ? DBNull.Value : Group),
+            ("scopeHasStep", HasStep is null ? DBNull.Value : HasStep),
+            ("scopeWithoutStep", WithoutStep is null ? DBNull.Value : WithoutStep),
+        ];
 
     /// <summary>
     /// The predicate for a relation that carries one row per case, or per event of a case, with the case start in
