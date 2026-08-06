@@ -9,6 +9,9 @@
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
+  <!-- Says that something is being waited for. Driven from the fetch chokepoint, so it covers every screen and cannot
+       drift out of sync with what is actually in flight. -->
+  <div class="loadingbar" role="status" aria-live="polite" aria-label="lädt"></div>
   <header class="topbar">
     <span class="brand"><span class="brand-accent">Process</span>Analyzer</span>
     <span class="topbar-sub">Was im Unternehmen tatsächlich passiert</span>

@@ -28,6 +28,15 @@ const hours = (value) =>
   value === null || value === undefined ? '—' : Number(value) >= 10 ? `${nf.format(Math.round(value))} h` : `${Number(value).toFixed(1)} h`;
 const moment = (value) => (value ? df.format(new Date(value)) : '—');
 
+/**
+ * The rows of a response, or none.
+ *
+ * `request` answers with null when its request was superseded — switching tabs while a level is loading does that, and
+ * it is a normal event, not an error. Reading `.rows` off it threw and killed the render, which is how a routine race
+ * turned into an empty page with a stack trace in the console.
+ */
+const rowsOf = (response) => (Array.isArray(response) ? response : (response?.rows ?? []));
+
 /** Labels for the crumbs, kept so a step or case reads as a word rather than a key while the reader is inside it. */
 const names = { process: null, step: null, case: null };
 
@@ -92,9 +101,9 @@ function renderCrumbs(here) {
 
 async function renderProcesses() {
   names.process = names.step = names.case = null;
-  const rows = await request(`/api/discovery/processes${periodQuery() ? `?${periodQuery().slice(1)}` : ''}`);
+  const rows = rowsOf(await request(`/api/discovery/processes${periodQuery() ? `?${periodQuery().slice(1)}` : ''}`));
 
-  $('drillReading').textContent = readings.processes(rows) ?? '';
+  $('drillReading').textContent = rows.length ? readings.processes(rows) ?? '' : '';
   $('drillReading').hidden = !rows.length;
 
   // Cards, not a table: at this level the reader is choosing, and a choice reads better as a handful of tiles than as
@@ -130,7 +139,7 @@ async function renderProcesses() {
 
 async function renderProcess(process) {
   const scoped = (route) => request(`/api/${route}?objectType=${encodeURIComponent(process)}${periodQuery()}`);
-  const [inventory, throughput, activities, transitions, rework, variants, automation] = await Promise.all([
+  const [inventory, throughput, activities, transitions, rework, variants, automation, drivers] = await Promise.all([
     request('/api/inventory'),
     scoped('throughput'),
     scoped('activities'),
@@ -138,14 +147,22 @@ async function renderProcess(process) {
     scoped('rework'),
     scoped('variants'),
     scoped('automation'),
+    scoped('drivers'),
   ]);
 
-  const inventoryRow = inventory.find((row) => row.object_type === process);
+  const inventoryRow = rowsOf(inventory).find((row) => row.object_type === process);
   names.process = inventoryRow?.bezeichnung ?? process;
   renderCrumbs(path());
 
-  const summary = throughput.rows?.[0];
-  const findings = collectFindings({ summary, transitions: transitions.rows, rework: rework.rows, variants: variants.rows, automation: automation.rows?.[0] });
+  const summary = rowsOf(throughput)[0];
+  const findings = collectFindings({
+    summary,
+    transitions: rowsOf(transitions),
+    rework: rowsOf(rework),
+    variants: rowsOf(variants),
+    automation: rowsOf(automation)[0],
+    drivers: rowsOf(drivers),
+  });
 
   $('drillReading').hidden = true;
   $('drillBody').innerHTML = `
@@ -166,7 +183,7 @@ async function renderProcess(process) {
 
     <h3>Die Schritte</h3>
     <p class="caveat">Ein Klick auf einen Schritt zeigt die Fälle, die durch ihn gelaufen sind.</p>
-    ${stepTable(activities.rows)}`;
+    ${stepTable(rowsOf(activities))}`;
 
   for (const item of $('drillBody').querySelectorAll('li[data-finding]')) {
     item.addEventListener('click', () => {
@@ -203,8 +220,28 @@ function summaryTiles(summary, inventoryRow) {
  * cases" does, and it can be clicked. Rank is by how much time or how many cases a finding is about, because that is
  * the order in which somebody would work through them.
  */
-function collectFindings({ summary, transitions, rework, variants, automation }) {
+function collectFindings({ summary, transitions, rework, variants, automation, drivers }) {
   const findings = [];
+
+  // First, because it is the only kind of statement here that compares: these cases against those, with the difference
+  // in hours. A factor without the hours behind it is a curiosity; the hours are the reason to do something.
+  for (const driver of (drivers ?? []).slice(0, 3)) {
+    const withHours = Number(driver.median_with_seconds) / 3600;
+    const withoutHours = Number(driver.median_without_seconds) / 3600;
+    const extraHours = Number(driver.extra_seconds) / 3600;
+    const factor = withoutHours > 0 ? withHours / withoutHours : null;
+    findings.push({
+      // Weighted above everything else on purpose: this is the one finding with a value attached.
+      weight: Number(driver.extra_seconds ?? 0) * 10,
+      text:
+        `Fälle mit „${driver.event_type}" dauern ${factor ? `${nf.format(Math.round(factor * 10) / 10)}-mal so lange` : 'deutlich länger'} ` +
+        `(${hours(withHours)} statt ${hours(withoutHours)}), ${nf.format(driver.with_cases)} von ` +
+        `${nf.format(Number(driver.with_cases) + Number(driver.without_cases))} Fällen. Darin stecken ${hours(extraHours)} ` +
+        `mehr als in den übrigen.`,
+      step: driver.event_type_key,
+      stepLabel: driver.event_type,
+    });
+  }
 
   for (const edge of (transitions ?? []).slice(0, 4)) {
     const seconds = Number(edge.total_seconds ?? 0);
@@ -304,7 +341,7 @@ async function renderStep(process, step) {
     ),
   ]);
 
-  const activity = activities.rows?.find((row) => row.event_type_key === step);
+  const activity = rowsOf(activities).find((row) => row.event_type_key === step);
   names.step = activity?.event_type ?? step;
   renderCrumbs(path());
 
@@ -324,7 +361,7 @@ async function renderStep(process, step) {
     }
     <h3>Fälle, die durch diesen Schritt gelaufen sind</h3>
     <p class="caveat">Nicht die Fälle, die hier stehen geblieben sind, sondern alle, die ihn passiert haben. Ein Klick öffnet den Fall.</p>
-    ${caseTable(cases.rows)}`;
+    ${caseTable(rowsOf(cases))}`;
 
   for (const row of $('drillBody').querySelectorAll('tr[data-case]')) {
     row.addEventListener('click', () => {
@@ -366,7 +403,7 @@ async function renderCase(process, step, caseId) {
   names.case = caseId.split(':')[1] ?? caseId;
   renderCrumbs(path());
 
-  const steps = response?.rows ?? [];
+  const steps = rowsOf(response);
   $('drillReading').hidden = true;
   $('drillBody').innerHTML = `
     <h3>Was mit diesem Fall passiert ist</h3>

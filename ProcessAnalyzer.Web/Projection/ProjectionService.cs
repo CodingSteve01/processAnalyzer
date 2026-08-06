@@ -118,7 +118,12 @@ public sealed class ProjectionService
 
         // Not CONCURRENTLY: that needs the view to be populated already and takes a heavier lock path. This store
         // has a single reader-facing instance and a refresh of a few seconds, so the simple form is honest.
+        // Order matters: the lifecycle measures durations in the clock of its process and decides whether a case is
+        // finished from that process's end steps, and both of those are derived from the timeline. Refreshing the
+        // lifecycle first would date it against the log it was built from.
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_timeline", ct);
+        await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.process_clock", ct);
+        await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.derived_end_activity", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_lifecycle", ct);
     }
 

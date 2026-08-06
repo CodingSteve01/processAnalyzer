@@ -167,6 +167,7 @@ public static class AnalyticsEndpoints
             "/automation-candidates",
             (repo, type, scope, token) => repo.AutomationCandidatesAsync(type, scope, token)
         );
+        MapScoped(group, "/drivers", (repo, type, scope, token) => repo.DriversAsync(type, scope, token));
         MapScoped(group, "/handovers", (repo, type, scope, token) => repo.HandoversAsync(type, scope, token));
         MapScoped(group, "/endpoints", (repo, type, scope, token) => repo.EndpointsAsync(type, scope, token));
 

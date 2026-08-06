@@ -38,7 +38,7 @@ export async function renderCases(objectType) {
     `/api/cases?objectType=${encodeURIComponent(objectType)}&search=${encodeURIComponent(search)}${periodQuery()}`
   );
   if (!response) return;
-  const rows = response.rows.map((row) => ({ ...row, __key: row.schluessel }));
+  const rows = (response.rows ?? []).map((row) => ({ ...row, __key: row.schluessel }));
 
   $('caseHint').textContent = `${nf.format(rows.length)} Fälle${rows.length === 200 ? ' (Anzeige begrenzt)' : ''}`;
   $('caseList').innerHTML = table(
@@ -70,7 +70,7 @@ async function openCase(objectId) {
 
   const response = await request(`/api/case/${encodeURIComponent(objectId)}`);
   if (!response) return;
-  const steps = response.rows;
+  const steps = response.rows ?? [];
 
   $('caseTimeline').innerHTML =
     `<h3>${escape(objectId.split(':')[1] ?? objectId)}</h3>` +
@@ -95,7 +95,7 @@ export async function renderTrend(objectType) {
   if (!objectType) return;
   const response = await request(`/api/trend?objectType=${encodeURIComponent(objectType)}${periodQuery()}`);
   if (!response) return;
-  const rows = response.rows;
+  const rows = response.rows ?? [];
 
   if (!rows.length) {
     $('trendTable').innerHTML = '<p class="empty">Noch keine abgeschlossenen Fälle.</p>';

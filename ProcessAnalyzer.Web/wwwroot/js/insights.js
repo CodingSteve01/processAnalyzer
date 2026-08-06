@@ -45,7 +45,9 @@ async function scoped(route) {
   const response = await request(
     `/api/${route}?objectType=${encodeURIComponent(objectType)}${periodQuery()}`
   );
-  return response.rows ?? [];
+  // A superseded request answers with null, which is a normal event when somebody switches tabs mid-load. Reading
+  // .rows off it killed the whole render.
+  return response?.rows ?? [];
 }
 
 /** Puts a computed sentence above a panel. Empty text removes the element rather than leaving a blank line. */

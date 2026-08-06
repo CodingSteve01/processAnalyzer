@@ -25,7 +25,22 @@ export function abortPolling() {
   }
 }
 
+// Whether anything is in flight, in one place, because this is the only place that knows.
+//
+// A page that waits without saying so looks broken. One query used to take two minutes and the screen showed the
+// previous answer the whole time, which is worse than a spinner: the reader believes what they are looking at. The
+// polling routes are excluded — a heartbeat every five seconds would leave the bar permanently on and it would stop
+// meaning anything.
+let inFlight = 0;
+
+function busy(delta) {
+  inFlight = Math.max(0, inFlight + delta);
+  document.documentElement.classList.toggle('loading', inFlight > 0);
+}
+
 export async function request(route, init = {}) {
+  const counts = !PollingRoutes.some((polling) => route.startsWith(polling));
+  if (counts) busy(1);
   try {
     const res = await fetch(route, { ...init, signal: nextSignal(route) });
     const body = await res.json().catch(() => null);
@@ -42,6 +57,8 @@ export async function request(route, init = {}) {
     // instead of painting an error the user never caused.
     if (err.name === 'AbortError') return null;
     throw err;
+  } finally {
+    if (counts) busy(-1);
   }
 }
 

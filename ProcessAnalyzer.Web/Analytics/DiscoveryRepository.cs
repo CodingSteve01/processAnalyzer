@@ -33,7 +33,7 @@ public sealed class DiscoveryRepository
             WITH lifecycle AS (
                 SELECT l.object_type,
                        count(*)                                                        AS cases,
-                       percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds)      AS median_seconds,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY l.duration_seconds) AS median_seconds,
                        avg(l.n_events)                                                 AS avg_steps,
                        count(*) FILTER (WHERE NOT l.has_human)::numeric / NULLIF(count(*), 0)     AS automatic_share,
                        min(l.first_ts)                                                 AS since
@@ -142,7 +142,7 @@ public sealed class DiscoveryRepository
                        d.actor_key AS entschieden_von,
                        d.event_type,
                        count(*) AS wie_oft,
-                       percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.biz_seconds(s.ts, d.ts)) AS wartezeit
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.duration_seconds(s.object_type, s.ts, d.ts)) AS wartezeit
                 FROM submitted s
                 JOIN decided d ON d.object_id = s.object_id AND d.actor_key <> s.actor_key
                 GROUP BY 1, 2, 3, 4
