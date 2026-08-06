@@ -167,6 +167,35 @@ public static class AnalyticsEndpoints
             "/automation-candidates",
             (repo, type, scope, token) => repo.AutomationCandidatesAsync(type, scope, token)
         );
+        // Not through MapScoped: this one needs the step as well as the process.
+        group.MapGet(
+            "/activity-trend",
+            async (
+                AnalyticsRepository repo,
+                string? objectType,
+                string? activity,
+                string? from,
+                string? until,
+                string? group,
+                CancellationToken t
+            ) =>
+                string.IsNullOrWhiteSpace(objectType) || string.IsNullOrWhiteSpace(activity)
+                    ? Results.BadRequest(new { error = "objectType und activity sind erforderlich" })
+                    : Results.Ok(
+                        new
+                        {
+                            objectType,
+                            activity,
+                            rows = await repo.ActivityTrendAsync(
+                                objectType,
+                                activity,
+                                Scope.FromQuery(from, until, group),
+                                t
+                            ),
+                        }
+                    )
+        );
+
         MapScoped(group, "/drivers", (repo, type, scope, token) => repo.DriversAsync(type, scope, token));
         MapScoped(group, "/handovers", (repo, type, scope, token) => repo.HandoversAsync(type, scope, token));
         MapScoped(group, "/endpoints", (repo, type, scope, token) => repo.EndpointsAsync(type, scope, token));

@@ -53,6 +53,10 @@
       <span class="viewtab-title">Diagramme</span>
       <span class="viewtab-sub">Der Ablauf als Bild</span>
     </button>
+    <button type="button" class="viewtab" data-view="bericht">
+      <span class="viewtab-title">Bericht</span>
+      <span class="viewtab-sub">Zum Ausdrucken</span>
+    </button>
     <button type="button" class="viewtab" data-view="benennen">
       <span class="viewtab-title">Benennen</span>
       <span class="viewtab-sub">Wie heißt das im Haus?</span>
@@ -306,6 +310,17 @@
         <span class="hint">Ziehen verschiebt das Bild, Strg + Mausrad zoomt.</span>
       </div>
       <div class="model-view" id="modelView"></div>
+    </section>
+
+    <!-- ========================= Bericht ========================= -->
+    <section class="panel view" data-view="bericht" hidden aria-label="Bericht">
+      <div class="panel-head noprint">
+        <h2>Bericht</h2>
+        <span class="spacer"></span>
+        <span class="hint">Gilt für den eingestellten Umfang oben.</span>
+        <button class="btn-primary" id="reportPrint" type="button">Drucken oder als PDF speichern</button>
+      </div>
+      <div id="reportBody"></div>
     </section>
 
     <!-- ========================= Benennen ========================= -->

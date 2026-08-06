@@ -18,6 +18,7 @@
 import { request } from './api.js';
 import { periodQuery, periodLabel } from './period.js';
 import { $, escape } from './utils.js';
+import { drawLineChart } from './linechart.js';
 import * as readings from './readings.js';
 
 const nf = new Intl.NumberFormat('de-DE');
@@ -39,6 +40,9 @@ const rowsOf = (response) => (Array.isArray(response) ? response : (response?.ro
 
 /** Labels for the crumbs, kept so a step or case reads as a word rather than a key while the reader is inside it. */
 const names = { process: null, step: null, case: null };
+
+/** Object type to URL template, from the installation's configuration. Empty when nothing is configured. */
+let sourceLinks = {};
 
 // ===== the path =====
 
@@ -183,7 +187,21 @@ async function renderProcess(process) {
 
     <h3>Die Schritte</h3>
     <p class="caveat">Ein Klick auf einen Schritt zeigt die Fälle, die durch ihn gelaufen sind.</p>
-    ${stepTable(rowsOf(activities))}`;
+    ${stepTable(rowsOf(activities))}
+
+    <h3>Wie es sich entwickelt</h3>
+    <p class="caveat">Fälle je Woche und Median der Durchlaufzeit. Ohne den Verlauf ist jede Zahl oben ein Standbild.</p>
+    <div class="chart-box"><svg id="drillTrend" preserveAspectRatio="none"></svg></div>
+    <div class="chart-legend" id="drillTrendLegend"></div>
+
+    <h3>Der Ablauf als Bild</h3>
+    <p class="caveat">Gerechnet mit pm4py, Hauptpfade ohne die Einmal-Wege. Der Reiter „Diagramme" zeigt dasselbe grösser.</p>
+    <div id="drillDiagram"></div>`;
+
+  // Both are additions to a level that already stands, so they load after it and their absence costs a picture rather
+  // than the page.
+  drawProcessTrend(process);
+  showProcessDiagram(process, names.process);
 
   for (const item of $('drillBody').querySelectorAll('li[data-finding]')) {
     item.addEventListener('click', () => {
@@ -359,9 +377,14 @@ async function renderStep(process, step) {
            </div>`
         : ''
     }
+    <h3>Wann dieser Schritt passiert</h3>
+    <div id="drillStepChart"></div>
+
     <h3>Fälle, die durch diesen Schritt gelaufen sind</h3>
     <p class="caveat">Nicht die Fälle, die hier stehen geblieben sind, sondern alle, die ihn passiert haben. Ein Klick öffnet den Fall.</p>
     ${caseTable(rowsOf(cases))}`;
+
+  drawActivityTrend(process, step);
 
   for (const row of $('drillBody').querySelectorAll('tr[data-case]')) {
     row.addEventListener('click', () => {
@@ -400,13 +423,23 @@ function caseTable(rows) {
 
 async function renderCase(process, step, caseId) {
   const response = await request(`/api/case/${encodeURIComponent(caseId)}`);
-  names.case = caseId.split(':')[1] ?? caseId;
+  const key = caseId.split(':')[1] ?? caseId;
+  names.case = key;
   renderCrumbs(path());
 
   const steps = rowsOf(response);
+  // The link into the source system, where the reader can actually do something about what they just found.
+  const template = sourceLinks[process];
+  const link = template
+    ? `<p><a class="drill-source-link" href="${escape(template.replace('{id}', encodeURIComponent(key)))}"
+             target="_blank" rel="noopener">Diesen Fall im System öffnen ›</a></p>`
+    : '';
+
   $('drillReading').hidden = true;
   $('drillBody').innerHTML = `
     <h3>Was mit diesem Fall passiert ist</h3>
+    ${link}
+    ${caseBar(steps)}
     <p class="caveat">
       „davor" ist die Wartezeit vor dem Schritt, in Arbeitszeit — die Frage ist ja, wo die Zeit hingeht. Ein Klick auf
       einen Schritt zeigt alle Fälle, die denselben Schritt hatten.
@@ -446,9 +479,156 @@ async function renderCase(process, step, caseId) {
 
 // ===== wiring =====
 
+/**
+ * Jump into the path from anywhere.
+ *
+ * The other screens name the same things — a process in the overview, a step in the analysis, a case in the case list —
+ * and every one of them was a dead end. Exported so those tables can hand over instead of duplicating the levels.
+ */
+export function drillTo(target) {
+  goTo(target);
+  const tab = document.querySelector('.viewtab[data-view="prozesse"]');
+  if (tab) tab.click();
+  renderDrill();
+}
+
 export function initDrill() {
+  // Loaded once and tolerated when absent: a missing link map costs a link, not a page.
+  request('/api/source-links')
+    .then((map) => {
+      sourceLinks = map ?? {};
+    })
+    .catch(() => {});
+
   // The browser's back button IS the way back, so the path lives in the hash and every change re-renders from it.
   window.addEventListener('hashchange', () => {
     if (window.location.hash.slice(1).split('/')[0] === 'prozesse') renderDrill();
   });
+}
+
+
+// ===== pictures =====
+
+/**
+ * The weekly line for a process: how many cases and how long they took.
+ *
+ * Drawn from the same endpoint the Entwicklung tab uses. It belongs here as well, because "the median is six hours" and
+ * "the median has doubled since Tuesday" are different statements and only one of them is a reason to act.
+ */
+async function drawProcessTrend(process) {
+  const response = await request(`/api/trend?objectType=${encodeURIComponent(process)}${periodQuery()}`);
+  const rows = rowsOf(response);
+  const host = $('drillTrend');
+  if (!host) return;
+
+  if (rows.length < 2) {
+    host.closest('.chart-box').innerHTML =
+      '<p class="empty">Zu wenige Wochen für einen Verlauf. Der Spiegel reicht noch nicht weit genug zurück.</p>';
+    $('drillTrendLegend').innerHTML = '';
+    return;
+  }
+
+  const dayFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' });
+  const legend = drawLineChart(
+    host,
+    rows.map((row) => dayFormat.format(new Date(row.woche))),
+    [
+      { name: 'Fälle', colour: 'var(--accent)', values: rows.map((row) => Number(row.faelle ?? 0)) },
+      {
+        name: 'Median in Stunden',
+        colour: 'var(--warning)',
+        values: rows.map((row) => Number(row.p50_stunden ?? 0)),
+        axis: 'right',
+      },
+    ]
+  );
+  $('drillTrendLegend').innerHTML = legend ?? '';
+}
+
+/** The mined diagram of this process, fitted, if a mining run has produced one. */
+async function showProcessDiagram(process, label) {
+  const status = await request('/api/mining/status');
+  const host = $('drillDiagram');
+  if (!host) return;
+
+  const available = (status?.models ?? []).filter((model) => model.available);
+  const entry = (status?.stats?.processes ?? []).find((row) => row.object_type === label);
+  const file = entry?.files?.main ?? entry?.files?.frequency;
+  const model = file ? available.find((candidate) => candidate.name === file) : null;
+
+  host.innerHTML = model
+    ? `<div class="model-view model-view-inline"><img class="model-image" src="${model.url}" alt="Ablauf ${escape(
+        label ?? process
+      )}" /></div>`
+    : '<p class="empty">Für diesen Ablauf wurde noch kein Diagramm gerechnet.</p>';
+}
+
+/**
+ * One step over time, as bars.
+ *
+ * Bars and not a line: a step happens on days, and between two days there is nothing to interpolate. A line would draw
+ * a slope across a weekend on which nothing happened at all.
+ */
+async function drawActivityTrend(process, step) {
+  const response = await request(
+    `/api/activity-trend?objectType=${encodeURIComponent(process)}&activity=${encodeURIComponent(step)}${periodQuery()}`
+  );
+  const rows = rowsOf(response);
+  const host = $('drillStepChart');
+  if (!host) return;
+
+  if (!rows.length) {
+    host.innerHTML = '';
+    return;
+  }
+
+  const max = Math.max(...rows.map((row) => Number(row.wie_oft)));
+  const dayFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' });
+  host.innerHTML = `
+    <div class="daybars">
+      ${rows
+        .map((row) => {
+          const share = Number(row.von_hand ?? 0);
+          const height = Math.max(3, Math.round((Number(row.wie_oft) / max) * 100));
+          return `<span class="daybar" style="height:${height}%"
+                        title="${dayFormat.format(new Date(row.tag))}: ${nf.format(row.wie_oft)}× in ${nf.format(
+                          row.faelle
+                        )} Fällen, ${pf.format(share)} von Hand"></span>`;
+        })
+        .join('')}
+    </div>
+    <p class="hint">${dayFormat.format(new Date(rows[0].tag))} bis ${dayFormat.format(
+      new Date(rows[rows.length - 1].tag)
+    )}, höchster Tag ${nf.format(max)}×. Beim Zeigen steht der Tag darunter.</p>`;
+}
+
+/**
+ * The case as one bar: each step a mark, the gap between them proportional to the wait.
+ *
+ * A table of timestamps makes the reader do the subtraction and then imagine the shape. The shape is the finding: three
+ * steps in a minute and then eleven hours of nothing is a different story from four evenly spaced hours, and the table
+ * reads the same either way.
+ */
+function caseBar(steps) {
+  if (steps.length < 2) return '';
+
+  const start = new Date(steps[0].wann).getTime();
+  const end = new Date(steps[steps.length - 1].wann).getTime();
+  const span = Math.max(1, end - start);
+
+  return `
+    <div class="casebar" aria-hidden="true">
+      ${steps
+        .map((step) => {
+          const at = ((new Date(step.wann).getTime() - start) / span) * 100;
+          const human = step.wer && step.wer !== '—';
+          return `<span class="casebar-mark${human ? ' human' : ''}" style="left:${at.toFixed(2)}%"
+                        title="${escape(step.was)} · ${moment(step.wann)}"></span>`;
+        })
+        .join('')}
+    </div>
+    <p class="hint">
+      ${moment(steps[0].wann)} bis ${moment(steps[steps.length - 1].wann)} · gefüllte Marken sind Schritte von Menschen,
+      offene sind Automatik. Abstände sind echte Abstände.
+    </p>`;
 }

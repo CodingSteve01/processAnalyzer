@@ -290,6 +290,40 @@ public sealed class AnalyticsRepository
         );
 
     /// <summary>
+    /// One step over time: how often it happened per day, in how many cases, and how much of it was done by hand.
+    /// </summary>
+    /// <remarks>
+    /// A number without a shape hides everything that matters about it. "646 times" can be a steady rhythm or one bad
+    /// Tuesday, and those are different problems. Days rather than weeks, because a step is something that happens on a
+    /// day and a week already smooths away the Tuesday.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ActivityTrendAsync(
+        string objectType,
+        string activity,
+        Scope scope,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT date_trunc('day', t.ts)::date                                       AS tag,
+                   count(*)                                                            AS wie_oft,
+                   count(DISTINCT t.object_id)                                         AS faelle,
+                   count(*) FILTER (WHERE t.actor_kind = 'human')::numeric
+                       / NULLIF(count(*), 0)                                           AS von_hand
+            FROM analytics.object_timeline t
+            WHERE t.object_type = @objectType
+              AND t.event_type = @activity
+              AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
+            GROUP BY 1
+            ORDER BY 1
+            """,
+            ct,
+            [("objectType", objectType), ("activity", activity), .. scope.Parameters()]
+        );
+
+    /// <summary>
     /// What makes cases slow: for every step, how long the cases that contain it take compared with the ones that do
     /// not.
     /// </summary>

@@ -7,7 +7,9 @@ import { $, escape } from './utils.js';
 import * as readings from './readings.js';
 import { renderCases, renderTrend, initCases } from './cases.js';
 import { renderNaming, initNaming } from './naming.js';
-import { renderDrill, initDrill } from './drill.js';
+import { renderDrill, initDrill, drillTo } from './drill.js';
+import { renderReport, initReport } from './report.js';
+import { whenOpened } from './views.js';
 
 const nf = new Intl.NumberFormat('de-DE');
 const pf = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 });
@@ -58,7 +60,13 @@ function reading(id, text) {
   element.hidden = !text;
 }
 
-function table(rows, columns) {
+/**
+ * A table. With `link`, every row carries what the drill-down needs and becomes clickable.
+ *
+ * The tables used to be the end of the road: they name a process, a step, a case, and then the reader is on their own.
+ * One optional function per table is enough to hand the row over instead.
+ */
+function table(rows, columns, link = null) {
   if (!rows.length) return '<p class="empty">Keine Daten für diesen Objekttyp.</p>';
   const head = columns.map((c) => `<th${c.numeric ? ' class="num"' : ''}>${escape(c.label)}</th>`).join('');
   const body = rows
@@ -66,10 +74,21 @@ function table(rows, columns) {
       const cells = columns
         .map((c) => `<td${c.numeric ? ' class="num"' : ''}>${c.render(row)}</td>`)
         .join('');
-      return `<tr>${cells}</tr>`;
+      const target = link?.(row);
+      const attrs = target
+        ? ` class="clickable" data-drill="${escape(JSON.stringify(target))}"`
+        : '';
+      return `<tr${attrs}>${cells}</tr>`;
     })
     .join('');
   return `<table class="data"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** Wires every row a table marked as drillable. One call per container, after it was written. */
+function wireDrill(containerId) {
+  for (const tr of $(containerId).querySelectorAll('tr[data-drill]')) {
+    tr.addEventListener('click', () => drillTo(JSON.parse(tr.dataset.drill)));
+  }
 }
 
 async function renderInventory() {
@@ -91,7 +110,8 @@ async function renderInventory() {
     { label: 'Objekte', numeric: true, render: (r) => nf.format(r.objects) },
     { label: 'Ereignisse', numeric: true, render: (r) => nf.format(r.events) },
     { label: 'Aktivitäten', numeric: true, render: (r) => nf.format(r.activities) },
-  ]);
+  ], (row) => ({ process: row.object_type }));
+  wireDrill('inventory');
 }
 
 async function renderThroughput() {
@@ -126,12 +146,17 @@ async function renderRework() {
   const [repeats, negatives] = await Promise.all([scoped('rework'), scoped('negative-outcomes')]);
   reading('rRework', readings.rework(repeats, negatives));
 
-  $('rework').innerHTML = table(repeats, [
-    { label: 'Aktivität', render: (r) => escape(r.event_type) },
-    { label: 'Fälle', numeric: true, render: (r) => nf.format(r.rework_cases) },
-    { label: 'Quote', numeric: true, render: (r) => pf.format(Number(r.rework_rate)) },
-    { label: 'Zusätzlich', numeric: true, render: (r) => nf.format(r.extra_executions) },
-  ]);
+  $('rework').innerHTML = table(
+    repeats,
+    [
+      { label: 'Aktivität', render: (r) => escape(r.event_type) },
+      { label: 'Fälle', numeric: true, render: (r) => nf.format(r.rework_cases) },
+      { label: 'Quote', numeric: true, render: (r) => pf.format(Number(r.rework_rate)) },
+      { label: 'Zusätzlich', numeric: true, render: (r) => nf.format(r.extra_executions) },
+    ],
+    (row) => (row.event_type_key ? { process: objectType, step: row.event_type_key } : null)
+  );
+  wireDrill('rework');
 
   $('negatives').innerHTML = table(negatives, [
     { label: 'Rückläufer-Schritt', render: (r) => escape(r.event_type) },
@@ -168,14 +193,19 @@ async function renderAutomation() {
     $('aManual').textContent = share(summary.manual_event_share);
   }
 
-  $('candidates').innerHTML = table(candidates.slice(0, 10), [
+  $('candidates').innerHTML = table(
+    candidates.slice(0, 10),
+    [
     { label: 'Schritt', render: (r) => escape(r.event_type) },
     { label: 'Häufigkeit', numeric: true, render: (r) => nf.format(r.freq) },
     { label: 'Manuell', numeric: true, render: (r) => pf.format(Number(r.manual)) },
     // Low entropy means the next step is always the same, which is what makes a step mechanical rather than a
     // judgement call. Automating a high-entropy step produces a support queue instead of a saving.
-    { label: 'Vorhersagbarkeit', numeric: true, render: (r) => pf.format(1 - Number(r.outcome_entropy)) },
-  ]);
+      { label: 'Vorhersagbarkeit', numeric: true, render: (r) => pf.format(1 - Number(r.outcome_entropy)) },
+    ],
+    (row) => (row.event_type_key ? { process: objectType, step: row.event_type_key } : null)
+  );
+  wireDrill('candidates');
 }
 
 async function renderEndpointsAndHandovers() {
@@ -265,7 +295,8 @@ async function renderOverview() {
     { label: 'Beginnt mit', render: (r) => escape(r.beginnt_mit ?? '—') },
     { label: 'Endet mit', render: (r) => escape(r.endet_mit ?? '—') },
     { label: 'Beteiligt', render: (r) => escape(r.beteiligte ?? '—') },
-  ]);
+  ], (row) => (row.technischer_typ ? { process: row.technischer_typ } : null));
+  wireDrill('processes');
 
   $('roles').innerHTML = table(roles, [
     { label: 'Rolle', render: (r) => escape(r.rolle) },
@@ -495,6 +526,8 @@ export async function renderInsights() {
   // The drill-down first: it is the default view, and a reader who lands on it should not wait for six panels they
   // are not looking at.
   await renderDrill();
+  // The report is assembled on demand rather than with every refresh: it fires a request per process, and nobody is
+  // reading it while they work in the drill-down.
   await renderOverview();
   await renderInventory();
   // Naming is independent of the chosen process, and it must render even when there is no process yet: a fresh
@@ -535,6 +568,8 @@ export function initInsights() {
   initModelViewer();
   initNaming();
   initDrill();
+  initReport();
+  whenOpened('bericht', () => renderReport());
 
   $('objectTypeSelect').addEventListener('change', (event) => {
     objectType = event.target.value;
