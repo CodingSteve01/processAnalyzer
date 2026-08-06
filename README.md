@@ -40,19 +40,23 @@ Generate `PA_ACTOR_HASH_KEY` **once** and keep it. It determines the pseudonyms;
 the history loses its continuity.
 
 The pull then runs by itself: once a minute it fetches new events, hourly it checks retroactively for gaps. Its
-state is on the **Spiegel** page.
+state is on the **Datenstand** page.
 
 ## The screens
 
+Five, and the first one is a path rather than a page. Everything that belongs to one process hangs under that process:
+there is no second place to pick a process, because the path already knows which one you are looking at.
+
 | Page | What it answers |
 |---|---|
-| **Überblick** | How many cases, which processes, how long they take, how much runs automatically |
-| **Analyse** | The ten analyses: step sequences, bottlenecks, rework, waiting times, handovers |
-| **Menschen** | Who works with whom, who decides about whom, which groups exist at all |
-| **Fälle** | A single case, step by step, with the wait before each step |
-| **Entwicklung** | The same figures per week — the answer to "has it got better?" |
-| **Diagramm** | The process models drawn by pm4py |
-| **Spiegel** | State of the pull: watermark, last runs, held-back rows, gaps |
+| **Prozesse** | The path: the landscape, then one process, then one step in it, then one case. The process level carries its own diagrams (BPMN, main paths, all paths, by duration, Petri net), its findings, its steps, and — folded away — bottlenecks, rework, returns, variants, endings, automation and handovers |
+| **Jetzt** | The present: what is queued and how long already, which cases are timed out of the ordinary, where the same person submitted and approved |
+| **Menschen** | Which roles exist, who does which step, who decides about whom, who works with whom. Every row leads into the path |
+| **Bericht** | The same figures for the set scope, in the order somebody would present them, printable to PDF |
+| **Datenstand** | Where the numbers come from: watermark, last runs, gaps, which calendar the durations use, what is not instrumented yet, and the terms — editable here, effective everywhere |
+
+Every table that names a process, a step or a person leads to it. A row that names something and goes nowhere is a
+dead end, and one test asserts that each of those tables carries the key the path needs.
 
 No screen shows a technical key. Every event and object type has a German label; if a dotted name does appear with
 a ⚠ in front of it, a label is missing — that is a defect in the tool, not a data problem.
@@ -190,7 +194,7 @@ ADO.NET, and refuses to start when the account may write.
 | Symptom | Cause |
 |---|---|
 | Page loads but stays empty | Almost always the sign-in: `/api/…` answers 401, the page shows nothing. Sign in again |
-| "Keine Quelle konfiguriert" on **Spiegel** | No connection string set, or the source is unreachable |
+| "Keine Quelle konfiguriert" on **Datenstand** | No connection string set, or the source is unreachable |
 | Database sign-in fails inside the container | The container does not inherit host-level routes (VPN, tunnel, hosts entry). Check from the host first whether it works at all |
 | A step is called `⚠ something.dotted.v1` | Label missing. New type at the source → refresh `source-catalogue.txt` and name it in `labels.tsv` |
 | Every step is called `⚠ …` | The vocabulary directory is not mounted, or `VocabularyPath` points somewhere else. The startup log says how many labels it loaded |

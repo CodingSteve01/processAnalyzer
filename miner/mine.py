@@ -98,6 +98,16 @@ def discover_per_process(ocel, minable, stats):
             if bpmn_file:
                 files["bpmn"] = bpmn_file
 
+            # The Petri net per process, not only for all of them together. Read next to the BPMN it becomes legible:
+            # the round nodes are states, the unlabelled boxes are the branches the miner needed to express the paths.
+            try:
+                single_net = pm4py.discover_oc_petri_net(single, inductive_miner_variant="imd", diagnostics_with_tbr=False)
+                net_name = f"petri-{slug}.svg"
+                pm4py.save_vis_ocpn(single_net, os.path.join(ARTIFACTS, net_name))
+                files["petri"] = net_name
+            except Exception as error:
+                stats.setdefault("petri_errors", []).append({"object_type": object_type, "error": str(error)})
+
             rule_result = rules(frame, object_type, stats)
             if rule_result:
                 stats.setdefault("rules", []).append(rule_result)

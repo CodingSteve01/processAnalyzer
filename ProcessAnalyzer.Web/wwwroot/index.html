@@ -21,45 +21,31 @@
   </header>
 
   <!--
-    Five views instead of one endless page, in the order somebody asks the questions: what do we do, who does it,
-    how well does it run, what does it look like, and can I trust the data underneath.
+    Five screens, in the order somebody asks: what do we do, what is on the desk now, who does it, what do I hand
+    somebody, and can I trust the numbers. There used to be nine, and three of them were the same figures reached a
+    different way — a process picked in a dropdown on one page while another page already knew which process the reader
+    was looking at. Everything about one process now hangs under that process.
   -->
   <nav class="viewnav" aria-label="Ansicht">
-    <button type="button" class="viewtab" data-view="prozesse">
+    <button type="button" class="viewtab active" data-view="prozesse">
       <span class="viewtab-title">Prozesse</span>
-      <span class="viewtab-sub">Vom Ablauf zum einzelnen Fall</span>
+      <span class="viewtab-sub">Landschaft, Ablauf, Schritt, Fall</span>
     </button>
     <button type="button" class="viewtab" data-view="jetzt">
       <span class="viewtab-title">Jetzt</span>
       <span class="viewtab-sub">Was liegt, was schiefging</span>
     </button>
-    <button type="button" class="viewtab active" data-view="ueberblick">
-      <span class="viewtab-title">Überblick</span>
-      <span class="viewtab-sub">Abläufe, Übergaben, Abdeckung</span>
-    </button>
     <button type="button" class="viewtab" data-view="menschen">
       <span class="viewtab-title">Menschen</span>
       <span class="viewtab-sub">Rollen, Entscheidungen, Übergaben</span>
-    </button>
-    <button type="button" class="viewtab" data-view="analyse">
-      <span class="viewtab-title">Prozessanalyse</span>
-      <span class="viewtab-sub">Kennzahlen je Ablauf</span>
-    </button>
-    <button type="button" class="viewtab" data-view="diagramm">
-      <span class="viewtab-title">Diagramme</span>
-      <span class="viewtab-sub">Der Ablauf als Bild</span>
     </button>
     <button type="button" class="viewtab" data-view="bericht">
       <span class="viewtab-title">Bericht</span>
       <span class="viewtab-sub">Zum Ausdrucken</span>
     </button>
-    <button type="button" class="viewtab" data-view="benennen">
-      <span class="viewtab-title">Benennen</span>
-      <span class="viewtab-sub">Begriffe pflegen</span>
-    </button>
     <button type="button" class="viewtab" data-view="spiegel">
       <span class="viewtab-title">Datenstand</span>
-      <span class="viewtab-sub">Woher die Zahlen kommen</span>
+      <span class="viewtab-sub">Herkunft, Abdeckung, Begriffe</span>
     </button>
   </nav>
 
@@ -88,7 +74,7 @@
       Falls wieder hinaus zu allen Fällen mit demselben Schritt. Der Pfad steht in der URL, damit der Zurück-Knopf des
       Browsers der Weg zurück ist und ein Befund verschickt werden kann.
     -->
-    <section class="panel view" data-view="prozesse" hidden aria-label="Prozesse">
+    <section class="panel view" data-view="prozesse" aria-label="Prozesse">
       <div class="panel-head">
         <nav class="drill-crumbs" id="drillCrumbs" aria-label="Pfad"></nav>
         <span class="spacer"></span>
@@ -132,42 +118,7 @@
       <div id="nowFourEyes"></div>
     </section>
 
-    <!-- ========================= Überblick ========================= -->
-    <section class="panel view" data-view="ueberblick" aria-label="Überblick">
-      <div class="panel-head">
-        <h2>Welche Prozesse haben wir?</h2>
-        <span class="spacer"></span>
-        <button class="btn-secondary" id="directoryBtn" type="button">Stammdaten neu laden</button>
-        <span class="hint" id="directoryHint"></span>
-      </div>
-      <p class="caveat">
-        Nichts davon ist konfiguriert. Die Liste entsteht aus den Ereignissen selbst — ein Prozess taucht auf,
-        sobald die erste Tatsache ihn erwähnt.
-      </p>
-      <p class="reading" id="rProcesses" hidden></p>
-      <div id="processes"></div>
 
-      <h3>Was kommt rein, was geht raus?</h3>
-      <p class="caveat">
-        Übergaben sind die Stellen, an denen etwas das Haus verlässt oder von außen hereinkommt. Ein Blick auf einen
-        Bildschirm ist keine Übergabe — hier steht nur, womit eine andere Seite weiterarbeitet.
-      </p>
-      <p class="reading" id="rHandovers" hidden></p>
-      <div id="handoverList"></div>
-
-      <h3>Womit gerechnet wird</h3>
-      <p class="reading" id="rCalendar" hidden></p>
-
-      <h3>Was wir noch nicht erfassen</h3>
-      <p class="caveat">
-        Ein sauber aussehendes Modell kann heißen „der Prozess ist einfach" oder „wir haben nur drei Schritte
-        instrumentiert". Nur diese Liste unterscheidet das.
-      </p>
-      <p class="reading" id="rCoverage" hidden></p>
-      <div id="coverage"></div>
-    </section>
-
-    <!-- ========================= Menschen ========================= -->
     <section class="panel view" data-view="menschen" hidden aria-label="Menschen">
       <div class="panel-head">
         <h2>Menschen und Zuständigkeiten</h2>
@@ -203,102 +154,7 @@
       <div id="roleHandovers"></div>
     </section>
 
-    <!-- ========================= Prozessanalyse ========================= -->
-    <section class="panel view" data-view="analyse" hidden aria-label="Prozessanalyse">
-      <div class="panel-head">
-        <h2>Prozessanalyse</h2>
-        <label class="scope">
-          Prozess
-          <select id="objectTypeSelect"></select>
-        </label>
-        <span class="spacer"></span>
-        <button class="btn-secondary" id="projectBtn" type="button">Neu berechnen</button>
-        <span class="hint" id="projectHint"></span>
-      </div>
-      <p class="caveat">
-        Jede Zahl auf dieser Seite gilt für genau einen Prozess (<strong id="scopeLabel">—</strong>),
-        gerechnet <strong id="periodNote">über den gesamten Zeitraum</strong>. Über Prozesse
-        hinweg zu summieren wäre falsch, nicht ungenau: ein Ereignis, das fünf Objekte berührt, zählte dann fünfmal.
-      </p>
 
-      <h3>Was im Log steckt</h3>
-      <div id="inventory"></div>
-
-      <h3>Durchlaufzeit (Arbeitszeit, abgeschlossene Fälle)</h3>
-      <p class="reading" id="rThroughput" hidden></p>
-      <div class="stats-grid">
-        <div class="stat-card"><h3>Fälle</h3><div class="metric-value" id="tCases">—</div></div>
-        <div class="stat-card"><h3>Median</h3><div class="metric-value" id="tP50">—</div></div>
-        <div class="stat-card"><h3>p80</h3><div class="metric-value" id="tP80">—</div></div>
-        <div class="stat-card"><h3>p95</h3><div class="metric-value" id="tP95">—</div>
-          <div class="metric-label">jeder zwanzigste Fall ist langsamer</div></div>
-        <div class="stat-card"><h3>Ø Schritte</h3><div class="metric-value" id="tSteps">—</div></div>
-        <div class="stat-card"><h3>außerhalb Arbeitszeit</h3><div class="metric-value" id="tOutside">—</div>
-          <div class="metric-label">Anteil der Kalenderzeit, in der niemand arbeiten konnte</div></div>
-      </div>
-
-      <h3>Wo die Zeit hingeht</h3>
-      <p class="caveat">
-        Verstrichene Zeit, nicht Wartezeit: ein Journal-Ereignis trägt einen Zeitpunkt, keine Bearbeitungsdauer.
-        Sortiert nach Gesamtzeit — die langsamste Kante ist meist ein Einzelfall, die teuerste ist die, die oft
-        passiert.
-      </p>
-      <p class="reading" id="rTransitions" hidden></p>
-      <div id="transitions"></div>
-
-      <h3>Nacharbeit und Rückläufer</h3>
-      <p class="reading" id="rRework" hidden></p>
-      <div id="rework"></div>
-      <div id="negatives"></div>
-
-      <h3>Varianten</h3>
-      <p class="reading" id="rVariants" hidden></p>
-      <div id="variants"></div>
-
-      <h3>Automatisierung</h3>
-      <div class="stats-grid">
-        <div class="stat-card"><h3>Ohne Menschen durchgelaufen</h3><div class="metric-value" id="aStp">—</div>
-          <div class="metric-label">Anteil der Fälle ganz ohne manuellen Schritt</div></div>
-        <div class="stat-card"><h3>Manuelle Schritte</h3><div class="metric-value" id="aManual">—</div>
-          <div class="metric-label">Anteil aller Ereignisse</div></div>
-      </div>
-      <p class="reading" id="rAutomation" hidden></p>
-      <div id="candidates"></div>
-
-      <h3>Wo Fälle enden</h3>
-      <p class="reading" id="rEndings" hidden></p>
-      <div id="endpoints"></div>
-
-      <h3>Übergaben in diesem Prozess</h3>
-      <div id="handovers"></div>
-    </section>
-
-    <!-- ========================= Diagramme ========================= -->
-    <section class="panel view" data-view="diagramm" hidden aria-label="Entdeckte Abläufe">
-      <div class="panel-head">
-        <h2>Entdeckte Abläufe als Diagramm</h2>
-        <span class="spacer"></span>
-        <span class="hint" id="miningHint"></span>
-      </div>
-      <p class="caveat">
-        Aus denselben Ereignissen gerechnet, mit pm4py. Eine Farbe pro Prozess: wo sich Farben in einem Kasten
-        treffen, arbeiten mehrere Abläufe am selben Schritt.
-      </p>
-      <!-- Process first, rendering second. The combined picture answers "where do processes meet" and nothing else;
-           with twenty object types in it, nobody can read how one process runs. -->
-      <div class="model-toolbar">
-        <label class="scope">
-          Prozess
-          <select id="modelProcess"></select>
-        </label>
-      </div>
-      <div class="model-tabs" id="modelTabs"></div>
-      <!-- No toolbar here: the shared viewer attaches its own above the box, the same one every other picture in this
-           tool has. Two sets of buttons on one picture is the confusion it exists to prevent. -->
-      <div class="model-view" id="modelView"></div>
-    </section>
-
-    <!-- ========================= Bericht ========================= -->
     <section class="panel view" data-view="bericht" hidden aria-label="Bericht">
       <div class="panel-head noprint">
         <h2>Bericht</h2>
@@ -309,33 +165,16 @@
       <div id="reportBody"></div>
     </section>
 
-    <!-- ========================= Benennen ========================= -->
-    <section class="panel view" data-view="benennen" hidden aria-label="Benennen">
-      <div class="panel-head">
-        <h2>Begriffe</h2>
-        <span class="spacer"></span>
-        <span class="hint" id="namingSummary"></span>
-        <button class="btn-secondary" id="namingExport" type="button">Als Datei herunterladen</button>
-      </div>
-      <p class="caveat">
-        Jeder Begriff auf jedem Bildschirm kommt aus dieser Liste. Was hier benannt wird, gilt sofort und überlebt
-        einen Neustart; das mitgelieferte Vokabular überschreibt es nicht mehr. Der Download ist dieselbe Datei, aus der
-        das Vokabular gelesen wird, damit die Wörter zurück in die Auslieferung wandern können.
-      </p>
-
-      <h3>Was noch keinen Namen hat</h3>
-      <p class="caveat">
-        Nach Häufigkeit sortiert, also in der Reihenfolge, in der Benennen etwas bringt. Ein unbenannter Schritt ist
-        auch ein unerklärter, und genau daran scheitert das Lesen eines Ablaufs.
-      </p>
-      <div id="namingGaps"></div>
-
-      <h3>Hier benannt statt aus dem Vokabular</h3>
-      <div id="namingOverrides"></div>
-    </section>
-
     <!-- ========================= Datenstand ========================= -->
     <section class="view" data-view="spiegel" hidden aria-label="Datenstand">
+      <div class="panel-head">
+        <h2>Woher die Zahlen kommen</h2>
+        <span class="spacer"></span>
+        <button class="btn-secondary" id="directoryBtn" type="button">Stammdaten neu laden</button>
+        <span class="hint" id="directoryHint"></span>
+        <button class="btn-secondary" id="projectBtn" type="button">Neu berechnen</button>
+        <span class="hint" id="projectHint"></span>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
           <h3>Wasserstand</h3>
@@ -382,6 +221,45 @@
           <button class="btn-secondary" id="sweepBtn" type="button">Lücken nachladen</button>
           <span class="hint" id="runHint"></span>
         </div>
+      </section>
+
+      <section class="panel">
+        <h3>Womit gerechnet wird</h3>
+        <p class="reading" id="rCalendar" hidden></p>
+
+        <h3>Was wir noch nicht erfassen</h3>
+        <p class="caveat">
+          Ein sauber aussehendes Modell kann heissen „der Ablauf ist einfach" oder „wir haben nur drei Schritte
+          instrumentiert". Nur diese Liste unterscheidet das.
+        </p>
+        <p class="reading" id="rCoverage" hidden></p>
+        <div id="coverage"></div>
+      </section>
+
+      <!-- Naming lives here because a name is part of the data standard, not part of an analysis: every screen reads
+           its words from this one list. -->
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Begriffe</h3>
+          <span class="spacer"></span>
+          <span class="hint" id="namingSummary"></span>
+          <button class="btn-secondary" id="namingExport" type="button">Als Datei herunterladen</button>
+        </div>
+        <p class="caveat">
+          Jeder Begriff auf jedem Bildschirm kommt aus dieser Liste. Was hier benannt wird, gilt sofort und überlebt
+          einen Neustart; das mitgelieferte Vokabular überschreibt es nicht mehr. Der Download ist dieselbe Datei, aus
+          der das Vokabular gelesen wird, damit die Wörter zurück in die Auslieferung wandern können.
+        </p>
+
+        <h4>Was noch keinen Namen hat</h4>
+        <p class="caveat">
+          Nach Häufigkeit sortiert, also in der Reihenfolge, in der Benennen etwas bringt. Ein unbenannter Schritt ist
+          auch ein unerklärter, und daran scheitert das Lesen eines Ablaufs.
+        </p>
+        <div id="namingGaps"></div>
+
+        <h4>Hier benannt statt aus dem Vokabular</h4>
+        <div id="namingOverrides"></div>
       </section>
     </section>
 

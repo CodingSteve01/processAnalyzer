@@ -76,7 +76,24 @@ function goTo({ process = null, step = null, case: caseId = null, actor = null }
 
 // ===== rendering =====
 
+/**
+ * The miner's report, fetched once per screen.
+ *
+ * Two things on the process level need it: the picture and the mined findings. The fetch layer keys its aborts by route,
+ * so two concurrent calls to the same route means the second cancels the first — and the loser resolves to null and
+ * quietly renders "for this process no diagram has been computed" while the file sits right there. Ask once, read twice.
+ */
+let miningPromise = null;
+
+function miningStatus() {
+  miningPromise ??= request('/api/mining/status');
+  return miningPromise;
+}
+
 export async function renderDrill() {
+  // A new screen asks again: a mining run may have finished since.
+  miningPromise = null;
+
   const here = path();
   renderCrumbs(here);
 
@@ -116,7 +133,11 @@ function renderCrumbs(here) {
 
 async function renderProcesses() {
   names.process = names.step = names.case = null;
-  const rows = rowsOf(await request(`/api/discovery/processes${periodQuery() ? `?${periodQuery().slice(1)}` : ''}`));
+  const [processes, boundary] = await Promise.all([
+    request(`/api/discovery/processes${periodQuery() ? `?${periodQuery().slice(1)}` : ''}`),
+    request(`/api/discovery/handovers${scopeQuery()}`),
+  ]);
+  const rows = rowsOf(processes);
 
   $('drillReading').textContent = rows.length ? readings.processes(rows) ?? '' : '';
   $('drillReading').hidden = !rows.length;
@@ -150,7 +171,7 @@ async function renderProcesses() {
         </button>`
         )
         .join('')}</div>`
-    : '<p class="empty">Noch keine Prozesse im Spiegel.</p>');
+    : '<p class="empty">Noch keine Prozesse im Spiegel.</p>') + boundarySection(rowsOf(boundary));
 
   if (rows.length) {
     // The landscape is a picture like any other here, so it gets the same controls: zoom, reading size, full screen.
@@ -169,11 +190,49 @@ async function renderProcesses() {
   }
 }
 
+/** What crosses the company boundary. A statement about the landscape, so it belongs to the landscape. */
+function boundarySection(rows) {
+  if (!rows.length) return '';
+  return `
+    <h3>Was hereinkommt und was hinausgeht</h3>
+    <p class="caveat">
+      Übergaben sind die Stellen, an denen etwas das Haus verlässt oder von aussen hereinkommt. Ein Blick auf einen
+      Bildschirm ist keine Übergabe — hier steht nur, womit eine andere Seite weiterarbeitet.
+    </p>
+    <table class="data">
+      <thead><tr><th>Richtung</th><th>Vorgang</th><th class="num">Anzahl</th><th class="num">an Tagen</th>
+                 <th>ausgelöst von</th></tr></thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+          <tr><td>${escape(row.richtung)}</td><td>${escape(row.vorgang)}</td>
+              <td class="num">${nf.format(row.anzahl)}</td><td class="num">${nf.format(row.an_tagen)}</td>
+              <td>${escape(row.ausgeloest_von)}</td></tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
+}
+
 // ── level 1: how does this one process run ────────────────────────────────────────────────────────────────────────
 
 async function renderProcess(process) {
   const scoped = (route) => request(`/api/${route}?objectType=${encodeURIComponent(process)}${periodQuery()}`);
-  const [inventory, throughput, activities, transitions, rework, variants, automation, drivers] = await Promise.all([
+  const [
+    inventory,
+    throughput,
+    activities,
+    transitions,
+    rework,
+    variants,
+    automation,
+    drivers,
+    negatives,
+    endpoints,
+    handovers,
+    candidates,
+  ] = await Promise.all([
     request(`/api/inventory${scopeQuery()}`),
     scoped('throughput'),
     scoped('activities'),
@@ -182,6 +241,10 @@ async function renderProcess(process) {
     scoped('variants'),
     scoped('automation'),
     scoped('drivers'),
+    scoped('negative-outcomes'),
+    scoped('endpoints'),
+    scoped('handovers'),
+    scoped('automation-candidates'),
   ]);
 
   const inventoryRow = rowsOf(inventory).find((row) => row.object_type === process);
@@ -204,6 +267,7 @@ async function renderProcess(process) {
 
     <section id="drillDiagramSection" hidden>
       <h3>Der Ablauf</h3>
+      <div class="model-tabs" id="drillDiagramTabs" hidden></div>
       <div id="drillDiagram"></div>
     </section>
 
@@ -251,6 +315,19 @@ async function renderProcess(process) {
       <div class="chart-legend" id="drillTrendLegend"></div>
     </section>
 
+    ${detailBlock({
+      process,
+      summary,
+      transitions: rowsOf(transitions),
+      rework: rowsOf(rework),
+      negatives: rowsOf(negatives),
+      variants: rowsOf(variants),
+      endpoints: rowsOf(endpoints),
+      automation: rowsOf(automation)[0],
+      candidates: rowsOf(candidates),
+      handovers: rowsOf(handovers),
+    })}
+
     <p class="hint" id="drillGaps"></p>`;
 
   // Both are additions to a level that already stands, so they load after it and their absence costs a picture rather
@@ -267,6 +344,177 @@ async function renderProcess(process) {
     });
   }
   wireStepRows(process);
+  for (const row of $('drillBody').querySelectorAll('tr[data-drill]')) {
+    row.addEventListener('click', () => drillTo(JSON.parse(row.dataset.drill)));
+  }
+}
+
+/**
+ * The figures below the fold, for one process.
+ *
+ * These used to be a page of their own with a process picker on top, which meant the same choice was made twice: once by
+ * clicking a process here, once by picking it in a dropdown there, and the two could disagree. They belong to the
+ * process, so they live under it — folded away, because a reader arrives with a question and not with a wish for
+ * eleven tables.
+ */
+function detailBlock({
+  process,
+  summary,
+  transitions,
+  rework,
+  negatives,
+  variants,
+  endpoints,
+  automation,
+  candidates,
+  handovers,
+}) {
+  const toStep = (row, key = 'event_type_key') => (row[key] ? { process, step: row[key] } : null);
+
+  const blocks = [
+    dataSection(
+      'Wo die Zeit hingeht',
+      transitions.slice(0, 12),
+      [
+        ['Übergang', (r) => `${escape(r.from_activity)} → ${escape(r.to_activity)}`],
+        ['Fälle', (r) => nf.format(r.n), true],
+        ['Median', (r) => hours(r.median_seconds / 3600), true],
+        ['Summe', (r) => hours(r.total_seconds / 3600), true],
+      ],
+      (r) => toStep(r, 'to_activity_key'),
+      'Verstrichene Zeit, nicht Bearbeitungszeit: ein Ereignis trägt einen Zeitpunkt, keine Dauer. Sortiert nach ' +
+        'Gesamtzeit, weil die langsamste Kante meist ein Einzelfall ist und die teuerste die, die oft passiert.'
+    ),
+    dataSection(
+      'Nacharbeit',
+      rework,
+      [
+        ['Schritt', (r) => escape(r.event_type)],
+        ['Fälle', (r) => nf.format(r.rework_cases), true],
+        ['Quote', (r) => pf.format(Number(r.rework_rate)), true],
+        ['zusätzliche Ausführungen', (r) => nf.format(r.extra_executions), true],
+      ],
+      toStep
+    ),
+    dataSection(
+      'Rückläufer',
+      negatives,
+      [
+        ['Schritt', (r) => escape(r.event_type)],
+        ['Fälle', (r) => nf.format(r.cases), true],
+        ['Anteil', (r) => pf.format(Number(r.case_share)), true],
+        ['Median mit', (r) => hours(r.median_with / 3600), true],
+        ['Median ohne', (r) => hours(r.median_without / 3600), true],
+      ],
+      toStep
+    ),
+    dataSection(
+      'Varianten',
+      variants.slice(0, 10),
+      [
+        ['Weg durch den Ablauf', (r) => `<span class="variant" title="${escape(r.variant)}">${escape(r.variant)}</span>`],
+        ['Fälle', (r) => nf.format(r.n), true],
+        ['Anteil', (r) => pf.format(Number(r.share)), true],
+        ['kumuliert', (r) => pf.format(Number(r.cum_share)), true],
+        ['Ø Dauer', (r) => hours(r.avg_seconds / 3600), true],
+      ],
+      null,
+      'Jede Zeile ist eine Reihenfolge von Schritten, die tatsächlich vorkam. Viele Varianten mit je wenigen Fällen ' +
+        'heissen: der Ablauf ist nicht einer, sondern mehrere.'
+    ),
+    dataSection(
+      'Wo Fälle enden',
+      endpoints.slice(0, 8),
+      [
+        ['letzter Schritt', (r) => escape(r.last_activity)],
+        ['Fälle', (r) => nf.format(r.cases), true],
+        ['Anteil', (r) => pf.format(Number(r.share)), true],
+        ['Median bis dahin', (r) => hours(r.median_seconds / 3600), true],
+      ],
+      (r) => toStep(r, 'last_activity_key')
+    ),
+    automationSection(automation, summary),
+    dataSection(
+      'Was sich automatisieren liesse',
+      candidates.slice(0, 10),
+      [
+        ['Schritt', (r) => escape(r.event_type)],
+        ['Häufigkeit', (r) => nf.format(r.freq), true],
+        ['von Hand', (r) => pf.format(Number(r.manual)), true],
+        ['Vorhersagbarkeit', (r) => pf.format(1 - Number(r.outcome_entropy)), true],
+      ],
+      toStep,
+      'Vorhersagbar heisst: nach diesem Schritt kommt fast immer derselbe nächste. Genau das macht einen Schritt ' +
+        'mechanisch. Einen unvorhersagbaren zu automatisieren erzeugt eine Rückfrage-Warteschlange statt einer Ersparnis.'
+    ),
+    dataSection(
+      'Übergaben zwischen Rollen',
+      handovers.slice(0, 12),
+      [
+        ['von', (r) => escape(r.from_actor)],
+        ['an', (r) => escape(r.to_actor)],
+        ['Fälle', (r) => nf.format(r.cases), true],
+        ['Übergaben', (r) => nf.format(r.handovers), true],
+      ],
+      null,
+      'Rolle an Rolle, nicht Person an Person, und erst ab fünf gemeinsamen Fällen, damit eine Zufallsbegegnung nicht wie eine Zuständigkeit aussieht.'
+    ),
+  ].filter(Boolean);
+
+  if (!blocks.length) return '';
+
+  return `
+    <details class="drill-more">
+      <summary>Zahlen im Detail (${blocks.length} Auswertungen)</summary>
+      ${blocks.join('')}
+    </details>`;
+}
+
+/** One titled table, or nothing at all. An empty section is a promise the data does not keep. */
+function dataSection(title, rows, columns, link = null, caveat = null) {
+  if (!rows?.length) return '';
+  const head = columns.map(([label, , numeric]) => `<th${numeric ? ' class="num"' : ''}>${escape(label)}</th>`).join('');
+  const body = rows
+    .map((row) => {
+      const target = link?.(row);
+      const cells = columns
+        .map(([, render, numeric]) => `<td${numeric ? ' class="num"' : ''}>${render(row)}</td>`)
+        .join('');
+      return target
+        ? `<tr class="clickable" data-drill="${escape(JSON.stringify(target))}">${cells}<td class="num"><span class="drill-go">›</span></td></tr>`
+        : `<tr>${cells}<td></td></tr>`;
+    })
+    .join('');
+
+  return `
+    <h3>${escape(title)}</h3>
+    ${caveat ? `<p class="caveat">${caveat}</p>` : ''}
+    <table class="data"><thead><tr>${head}<th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function automationSection(automation, summary) {
+  if (!automation) return '';
+  const straight = automation.straight_through_share;
+  const manual = automation.manual_event_share;
+  if (straight === null && manual === null) return '';
+
+  return `
+    <h3>Automatisierung</h3>
+    <div class="stats-grid">
+      <div class="stat-card"><h3>ohne Menschen durchgelaufen</h3>
+        <div class="metric-value">${straight === null ? '—' : pf.format(Number(straight))}</div>
+        <div class="metric-label">Fälle ganz ohne manuellen Schritt</div></div>
+      <div class="stat-card"><h3>Schritte von Hand</h3>
+        <div class="metric-value">${manual === null ? '—' : pf.format(Number(manual))}</div>
+        <div class="metric-label">Anteil aller Ereignisse</div></div>
+      ${
+        summary?.outside_hours_share
+          ? `<div class="stat-card"><h3>außerhalb der Arbeitszeit</h3>
+               <div class="metric-value">${pf.format(Number(summary.outside_hours_share))}</div>
+               <div class="metric-label">Anteil der Kalenderzeit ohne Arbeitstag</div></div>`
+          : ''
+      }
+    </div>`;
 }
 
 function summaryTiles(summary, inventoryRow) {
@@ -647,7 +895,7 @@ async function drawProcessTrend(process) {
 
 /** The mined diagram of this process, fitted, if a mining run has produced one. */
 async function showProcessDiagram(process, label) {
-  const status = await request('/api/mining/status');
+  const status = await miningStatus();
   const host = $('drillDiagram');
   if (!host) return;
 
@@ -663,8 +911,50 @@ async function showProcessDiagram(process, label) {
 
   $('drillDiagramSection').hidden = false;
 
-  // Inlined rather than shown as an image, because an image cannot be clicked. The boxes carry the same German labels
-  // the tables use — we generate both — so each one can be matched back to a step and lead into it.
+  // Every rendering of THIS process, in one place. The diagram page used to own this switch, which meant leaving the
+  // process to see it drawn differently and finding your way back afterwards.
+  const renderings = [
+    ['bpmn', 'BPMN'],
+    ['main', 'Hauptpfade'],
+    ['frequency', 'Alle Pfade'],
+    ['performance', 'Nach Dauer'],
+    ['petri', 'Petri-Netz'],
+  ].filter(([key]) => entry?.files?.[key] && available.some((row) => row.name === entry.files[key]));
+
+  if (renderings.length > 1) {
+    $('drillDiagramTabs').innerHTML = renderings
+      .map(
+        ([key, label], index) =>
+          `<button type="button" class="model-tab${index === 0 ? ' active' : ''}" data-file="${escape(
+            entry.files[key]
+          )}">${label}</button>`
+      )
+      .join('');
+    $('drillDiagramTabs').hidden = false;
+
+    for (const tab of $('drillDiagramTabs').querySelectorAll('.model-tab')) {
+      tab.addEventListener('click', async () => {
+        for (const other of $('drillDiagramTabs').querySelectorAll('.model-tab')) other.classList.remove('active');
+        tab.classList.add('active');
+        await paintDiagram(available.find((row) => row.name === tab.dataset.file), process, label);
+      });
+    }
+  }
+
+  await paintDiagram(model, process, label);
+}
+
+/**
+ * Draws one rendering into the box.
+ *
+ * Inlined rather than shown as an image, because an image cannot be clicked: the boxes carry the same German labels the
+ * tables use — we generate both — so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
+ * no such labels on every node, and then the picture is simply a picture.
+ */
+async function paintDiagram(model, process, label) {
+  const host = $('drillDiagram');
+  if (!host || !model) return;
+
   let svg;
   try {
     const response = await fetch(model.url);
@@ -675,10 +965,12 @@ async function showProcessDiagram(process, label) {
   }
 
   host.innerHTML = `<div class="model-view model-view-inline" id="drillDiagramBox">${svg}</div>
-    <p class="hint">Ein Klick auf einen Kasten führt zu den Fällen, die durch diesen Schritt gelaufen sind.</p>`;
-  // Same controls as everywhere else, including full screen: a mined graph is metres wide and this box is not.
+    <p class="hint" id="drillDiagramHint"></p>`;
   attachViewer($('drillDiagramBox'), { title: `Ablauf ${label ?? process}` });
-  wireDiagram(process);
+  const clickable = wireDiagram(process);
+  $('drillDiagramHint').textContent = clickable
+    ? 'Ein Klick auf einen Kasten führt zu den Fällen, die durch diesen Schritt gelaufen sind.'
+    : 'In dieser Darstellung tragen nicht alle Knoten einen Schritt: runde Knoten sind Zustände, leere Kästen sind Verzweigungen des Miners.';
 }
 
 /**
@@ -690,13 +982,15 @@ async function showProcessDiagram(process, label) {
  */
 function wireDiagram(process) {
   const box = $('drillDiagramBox');
-  if (!box) return;
+  if (!box) return false;
 
   const steps = [...document.querySelectorAll('#drillBody tr[data-step]')].map((row) => ({
     key: row.dataset.step,
     label: row.dataset.label,
   }));
-  if (!steps.length) return;
+  if (!steps.length) return false;
+
+  let wired = 0;
 
   for (const node of box.querySelectorAll('g.node')) {
     const text = [...node.querySelectorAll('text')].map((element) => element.textContent).join(' ');
@@ -707,11 +1001,14 @@ function wireDiagram(process) {
     if (!match) continue;
 
     node.classList.add('node-clickable');
+    wired++;
     node.addEventListener('click', () => {
       names.step = match.label;
       goTo({ process, step: match.key });
     });
   }
+
+  return wired > 0;
 }
 
 /**
@@ -945,7 +1242,7 @@ function noteGap(text) {
  * showed one without the other would suggest the second had nothing to say.
  */
 async function showMinedInsights(label) {
-  const status = await request('/api/mining/status');
+  const status = await miningStatus();
   const stats = status?.stats;
   if (!stats) return;
 
