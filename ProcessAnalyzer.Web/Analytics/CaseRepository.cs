@@ -94,6 +94,7 @@ public sealed class CaseRepository
             """
             SELECT t.seq                                                           AS schritt,
                    analytics.label_activity(t.event_type)                          AS was,
+                   t.event_type                                                    AS was_key,
                    t.ts                                                            AS wann,
                    analytics.person_with_role(t.actor_key)                         AS wer,
                    t.actor_kind                                                    AS art,

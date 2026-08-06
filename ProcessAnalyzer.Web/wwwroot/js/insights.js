@@ -7,6 +7,7 @@ import { $, escape } from './utils.js';
 import * as readings from './readings.js';
 import { renderCases, renderTrend, initCases } from './cases.js';
 import { renderNaming, initNaming } from './naming.js';
+import { renderDrill, initDrill } from './drill.js';
 
 const nf = new Intl.NumberFormat('de-DE');
 const pf = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 });
@@ -489,6 +490,9 @@ function initModelViewer() {
 }
 
 export async function renderInsights() {
+  // The drill-down first: it is the default view, and a reader who lands on it should not wait for six panels they
+  // are not looking at.
+  await renderDrill();
   await renderOverview();
   await renderInventory();
   // Naming is independent of the chosen process, and it must render even when there is no process yet: a fresh
@@ -528,6 +532,7 @@ export function initInsights() {
 
   initModelViewer();
   initNaming();
+  initDrill();
 
   $('objectTypeSelect').addEventListener('change', (event) => {
     objectType = event.target.value;

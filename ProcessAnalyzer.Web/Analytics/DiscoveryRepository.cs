@@ -75,6 +75,9 @@ public sealed class DiscoveryRepository
                 GROUP BY 1
             )
             SELECT analytics.label_object(l.object_type)        AS prozess,
+                   -- The key beside the name: a screen shows the name, a click has to send back something the next
+                   -- query can scope to.
+                   l.object_type                                AS technischer_typ,
                    -- A type with a handful of instances but thousands of events is a configuration record that many
                    -- cases refer to, not a case itself. Ranking it next to real processes reads as "one case that
                    -- takes 593 hours", which is the opposite of what the data says.
