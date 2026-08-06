@@ -72,6 +72,9 @@ body {
   padding: 0 24px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
 .brand {
@@ -372,17 +375,76 @@ table.data tbody tr:hover { background: var(--bg-card); }
 .model-tab:hover { background: var(--bg-hover); color: var(--text); }
 .model-tab.active { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
 
-/* Graphviz output is far wider than any screen; it scrolls inside its own box instead of stretching the page. */
-.model-view {
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: auto;
-  max-height: 70vh;
-  padding: 8px;
+/* --- the diagram viewer -------------------------------------------------------------------------------------- */
+
+.model-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
-.model-view object { display: block; min-width: 100%; }
+.model-zoom {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.model-zoom:hover { background: var(--bg-hover); color: var(--text); }
+
+.model-zoom-level {
+  min-width: 5.5em;
+  text-align: center;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Graphviz draws black on transparent, so the picture needs a light surface to be legible at all — but a bare white
+ * rectangle in a dark application reads as a hole in the page. Inset and rounded with a visible frame it reads as a
+ * sheet of paper lying on the page, which is what it is.
+ */
+.model-view {
+  background: #fbfbfd;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  overflow: auto;
+  /* Grows with the picture up to most of the screen: a two-step process must not sit in the corner of an empty white
+     page, and a fitted twenty-type graph needs every line it can get. */
+  max-height: 78vh;
+  padding: 12px;
+  cursor: grab;
+  overscroll-behavior: contain;
+}
+
+.model-view.dragging { cursor: grabbing; }
+
+/*
+ * The one panel that breaks out of the 1100 px column. Everything else is text and reads better narrow; a mined graph
+ * is thousands of points wide, and every pixel of width is legibility the reader does not have to zoom for.
+ */
+.panel.view[data-view='diagramm'] {
+  width: min(calc(100vw - 48px), 1800px);
+  margin-left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Width is set from the viewer (a factor on the fitted width); height follows, so the aspect ratio cannot drift. */
+.model-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* The picture is dragged, not selected — without this every drag paints a blue selection over the diagram. */
+  user-select: none;
+  -webkit-user-drag: none;
+}
 
 /* --- view navigation ----------------------------------------------------------------------------------------- */
 
@@ -489,11 +551,34 @@ table.data tbody tr:hover { background: var(--bg-card); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-/* The period control in the header. Inline so the window is visible from every view rather than hidden in one panel. */
+/*
+ * The scope of every question, on its own row under the view tabs. It used to sit in the topbar next to the brand,
+ * where the last date field was cut off at the window edge on anything narrower than a desktop — and a control the
+ * reader cannot see is one they never apply.
+ */
+.scopebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding: 10px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.scopebar-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .periodbar {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .periodbar input[type='date'] {

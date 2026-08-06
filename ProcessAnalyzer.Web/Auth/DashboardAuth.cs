@@ -100,6 +100,15 @@ public static class DashboardAuth
                     + "because it looks like protection. Generate one with: dotnet run -- hash-password"
             );
 
+        if (!IsWellFormed(options.DashboardPasswordHash))
+            throw new InvalidOperationException(
+                "DashboardPasswordHash is not a hash this application produced. Expected four "
+                    + "dollar-separated parts (pbkdf2-sha256$iterations$salt$key), got "
+                    + $"{options.DashboardPasswordHash.Split('$').Length}. The usual cause is the dollar sign: docker "
+                    + "compose interpolates it inside an env file, so the hash reaches the container cut short and "
+                    + "every correct password is rejected. Write it as $$ in .env, or let scripts/apply-secrets.sh do it."
+            );
+
         app.UseAuthentication();
         app.UseAuthorization();
 
@@ -172,6 +181,17 @@ public static class DashboardAuth
     }
 
     private const int Iterations = 210_000;
+
+    /// <summary>
+    /// Whether a stored hash has the shape <see cref="Verify" /> can read at all. Checked at startup, because
+    /// <see cref="Verify" /> answers "no" to a malformed hash exactly as it answers a wrong password, and that
+    /// silence is what turns a mangled config value into an unexplainable login.
+    /// </summary>
+    public static bool IsWellFormed(string stored)
+    {
+        var parts = stored.Split('$');
+        return parts.Length == 4 && parts[0] == "pbkdf2-sha256" && int.TryParse(parts[1], out _);
+    }
 
     private static bool Verify(string? password, string stored)
     {

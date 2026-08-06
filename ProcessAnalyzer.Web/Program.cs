@@ -147,12 +147,19 @@ app.UseDefaultFiles();
 app.UseStaticFiles(
     new StaticFileOptions
     {
+        // Revalidate every asset on every load, and never serve one from cache without asking.
+        //
+        // This used to be max-age=3600. The markup carries no version in its asset URLs, so for an hour after an
+        // update a browser combined the new HTML with the previous JS — new buttons wired to code that did not
+        // contain their handlers yet, doing nothing at all when clicked, with nothing in the console to explain it.
+        // A conditional request per asset costs a 304 on a local network; a UI whose halves disagree costs an hour of
+        // looking for a bug that is not in the code.
         OnPrepareResponse = ctx =>
         {
             var ext = Path.GetExtension(ctx.File.Name).ToLowerInvariant();
-            if (ext is ".js" or ".css" or ".woff2" or ".woff" or ".svg")
+            if (ext is ".js" or ".css" or ".html" or ".woff2" or ".woff" or ".svg")
             {
-                ctx.Context.Response.Headers.CacheControl = "public, max-age=3600, must-revalidate";
+                ctx.Context.Response.Headers.CacheControl = "no-cache";
             }
         },
     }

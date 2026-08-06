@@ -49,6 +49,68 @@ def discover(ocel, stats):
         stats["models"].append("ocpn.svg")
         stats["ocpn_object_types"] = minable
 
+    stats["processes"] = discover_per_process(ocel, minable, stats)
+
+
+def discover_per_process(ocel, minable, stats):
+    """
+    One diagram per process, next to the combined one.
+
+    The combined graph answers "where do processes meet" and nothing else: with twenty object types in one picture it
+    is a wall of crossing edges, and the reader who wants to know how ONE process runs cannot find it in there. Per
+    process the same data is a readable line of boxes.
+
+    Each process also gets a "main paths" rendering with the one-off edges dropped. A directly-follows graph keeps
+    every path that occurred even once, and in real data those single traces are most of the edges and none of the
+    insight.
+    """
+    processes = []
+    for object_type in sorted(minable):
+        slug = slugify(object_type)
+        try:
+            single = pm4py.filter_ocel_object_types(ocel, [object_type])
+            graph = pm4py.discover_ocdfg(single, business_hours=True, business_hour_slots=BUSINESS_HOURS)
+
+            files = {}
+            frequency = f"process-{slug}-frequency.svg"
+            pm4py.save_vis_ocdfg(graph, os.path.join(ARTIFACTS, frequency), annotation="frequency",
+                                 act_metric="events", edge_metric="event_couples", graph_title=object_type)
+            files["frequency"] = frequency
+
+            performance = f"process-{slug}-performance.svg"
+            pm4py.save_vis_ocdfg(graph, os.path.join(ARTIFACTS, performance), annotation="performance",
+                                 performance_aggregation="median", graph_title=object_type)
+            files["performance"] = performance
+
+            # Two occurrences, not a percentage: a share of the busiest edge would hide a whole branch in a process
+            # whose main path is a thousand times more frequent than its exception path, and the exception path is
+            # usually the interesting one. Twice means "happened again", which is the weakest claim to being a path.
+            main = f"process-{slug}-main.svg"
+            pm4py.save_vis_ocdfg(graph, os.path.join(ARTIFACTS, main), annotation="frequency",
+                                 act_metric="events", edge_metric="event_couples",
+                                 act_threshold=2, edge_threshold=2, graph_title=object_type)
+            files["main"] = main
+
+            processes.append({"object_type": object_type, "slug": slug, "files": files})
+        except Exception as error:  # one unminable process must not cost the other nineteen their diagrams
+            processes.append({"object_type": object_type, "slug": slug, "error": str(error)})
+            stats.setdefault("process_errors", []).append({"object_type": object_type, "error": str(error)})
+    return processes
+
+
+def slugify(name):
+    """
+    A file name from a label. The labels are German and carry umlauts; those are folded rather than dropped, so
+    "Aufträge" and "Auftrage" cannot collide into one file.
+    """
+    folded = (name.lower()
+              .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
+              .replace("ß", "ss").replace("é", "e").replace("è", "e"))
+    slug = "".join(character if character.isalnum() else "-" for character in folded)
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-")[:60] or "prozess"
+
 
 def petri_net_candidates(ocel):
     """Splits object types into those with a discoverable process and those with a single activity."""

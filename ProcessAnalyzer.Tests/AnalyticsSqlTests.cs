@@ -95,6 +95,43 @@ public sealed class AnalyticsSqlTests
     }
 
     [Fact]
+    public async Task ObjectLabel_UsesTheEntityNounForTheGenericTier()
+    {
+        // An entity that only ever appears through the generic tier has no 'object' label — nothing declares it as a
+        // business object. It was still counted on the screens that count objects, and read there as "⚠ <slug>" while
+        // the step it appeared in read as proper German.
+        await ExecuteAsync(
+            "INSERT INTO ocel.label (kind, type_name, label_de) VALUES ('entity', 'test-stamp', 'Zeitstempel') "
+                + "ON CONFLICT (kind, type_name) DO UPDATE SET label_de = EXCLUDED.label_de"
+        );
+
+        var label = await TextAsync("SELECT analytics.label_object('test-stamp')");
+
+        await ExecuteAsync("DELETE FROM ocel.label WHERE kind = 'entity' AND type_name = 'test-stamp'");
+
+        Assert.Equal("Zeitstempel", label);
+    }
+
+    [Fact]
+    public async Task ObjectLabel_StillMarksATypeNobodyHasNamed()
+    {
+        var label = await TextAsync("SELECT analytics.label_object('test-nothing-named-this')");
+
+        // The fallback must not swallow the marker: an unnamed type stays visible as one.
+        Assert.StartsWith("⚠", label);
+        Assert.Contains("test-nothing-named-this", label);
+    }
+
+    [Fact]
+    public async Task ObjectLabel_PrefersTheDeclaredObjectLabelOverTheEntityNoun()
+    {
+        // Plural on the screens that count, singular in the activity sentence. Where both exist the object label wins.
+        var label = await TextAsync("SELECT analytics.label_object('document')");
+
+        Assert.Equal("Belege", label);
+    }
+
+    [Fact]
     public async Task Identity_IsOffUnlessTheSettingSaysOtherwise()
     {
         await ExecuteAsync("UPDATE analytics.setting SET value = 'false' WHERE key = 'show_actor_identity'");
@@ -112,6 +149,59 @@ public sealed class AnalyticsSqlTests
 
         await ExecuteAsync("UPDATE analytics.setting SET value = 'false' WHERE key = 'show_actor_identity'");
         await ExecuteAsync("DELETE FROM dim.actor WHERE actor_key = 'a:testkey0001'");
+    }
+
+    /// <summary>
+    /// One person, two channels: confirmed from the truck and corrected at a desk.
+    /// </summary>
+    /// <remarks>
+    /// dim.actor_role carries one row per (key, kind), so this person has two — and every scalar subquery over it
+    /// raised 21000 the moment real data contained anyone who had done both. Every screen that names an actor went
+    /// blank at once, which is how it was found. The human is the answer: the device is a channel, not a second
+    /// person.
+    /// </remarks>
+    [Fact]
+    public async Task PersonWithRole_SameActorAsHumanAndDevice_NamesTheHuman()
+    {
+        await SeedActorEventAsync(sourceId: -9001, actorKind: "human");
+        await SeedActorEventAsync(sourceId: -9002, actorKind: "device");
+        await ExecuteAsync(
+            "INSERT INTO dim.actor (actor_key, source_id, display_name) VALUES ('a:testmulti01', 'u-9', 'Dieter Beispiel') "
+                + "ON CONFLICT (actor_key) DO UPDATE SET display_name = EXCLUDED.display_name"
+        );
+        await ExecuteAsync("UPDATE analytics.setting SET value = 'true' WHERE key = 'show_actor_identity'");
+
+        var label = await TextAsync("SELECT analytics.person_with_role('a:testmulti01')");
+
+        Assert.StartsWith("Dieter Beispiel", label, StringComparison.Ordinal);
+
+        await ExecuteAsync("UPDATE analytics.setting SET value = 'false' WHERE key = 'show_actor_identity'");
+        await ExecuteAsync("DELETE FROM dim.actor WHERE actor_key = 'a:testmulti01'");
+        await ExecuteAsync("DELETE FROM journal.event WHERE source_id IN (-9001, -9002)");
+    }
+
+    /// <summary>Puts one event of the given kind into the log, which is where dim.actor_role reads its pairs from.</summary>
+    private async Task SeedActorEventAsync(long sourceId, string actorKind)
+    {
+        await ExecuteAsync(
+            $"""
+            INSERT INTO journal.event
+                (source_id, event_id, event_type, occurred_at, recorded_at, performer_type, performer_id,
+                 source_application)
+            VALUES ({sourceId}, gen_random_uuid(), 'demo.thing.happened.v1', now(), now(), '{actorKind}', 'u-9',
+                    'erp')
+            ON CONFLICT (source_id) DO NOTHING
+            """
+        );
+        await ExecuteAsync(
+            $"""
+            INSERT INTO ocel.event
+                (id, source_id, type, ts, recorded_at, actor_key, actor_kind, source_application)
+            VALUES ('e:test{sourceId}', {sourceId}, 'demo.thing.happened.v1', now(), now(), 'a:testmulti01',
+                    '{actorKind}', 'erp')
+            ON CONFLICT (id) DO NOTHING
+            """
+        );
     }
 
     private async Task ConfigureCalendarAsync(decimal hours, (string Day, decimal Factor)[] holidays)

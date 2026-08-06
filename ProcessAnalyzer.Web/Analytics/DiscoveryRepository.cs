@@ -26,7 +26,7 @@ public sealed class DiscoveryRepository
     /// a life. Nothing has to be configured for this to work — a new object type appears here the moment the first
     /// fact mentions it, which is the entire reason for mining rather than modelling.
     /// </remarks>
-    public Task<List<Dictionary<string, object?>>> ProcessesAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> ProcessesAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -35,14 +35,21 @@ public sealed class DiscoveryRepository
                        count(*)                                                        AS cases,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds)      AS median_seconds,
                        avg(l.n_events)                                                 AS avg_steps,
-                       count(*) FILTER (WHERE NOT l.has_human)::numeric / count(*)     AS automatic_share,
+                       count(*) FILTER (WHERE NOT l.has_human)::numeric / NULLIF(count(*), 0)     AS automatic_share,
                        min(l.first_ts)                                                 AS since
                 FROM analytics.object_lifecycle l
+                WHERE (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(l.object_id, @scopeGroup)
                 GROUP BY 1
             ),
             starts AS (
                 SELECT DISTINCT ON (object_type) object_type, event_type, count(*) OVER (PARTITION BY object_type, event_type) AS n
-                FROM analytics.object_timeline WHERE seq = 1
+                FROM analytics.object_timeline
+                WHERE seq = 1
+                  AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(object_id, @scopeGroup)
                 ORDER BY object_type, n DESC
             ),
             ends AS (
@@ -50,7 +57,11 @@ public sealed class DiscoveryRepository
                        count(*) OVER (PARTITION BY t.object_type, t.event_type) AS n
                 FROM (
                     SELECT DISTINCT ON (object_id) object_id, object_type, event_type
-                    FROM analytics.object_timeline ORDER BY object_id, seq DESC
+                    FROM analytics.object_timeline
+                    WHERE (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
+                      AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
+                      AND analytics.case_touched_by_group(object_id, @scopeGroup)
+                    ORDER BY object_id, seq DESC
                 ) t
                 ORDER BY t.object_type, n DESC
             ),
@@ -58,6 +69,9 @@ public sealed class DiscoveryRepository
                 SELECT t.object_type, string_agg(DISTINCT r.role, ', ' ORDER BY r.role) AS involved
                 FROM analytics.object_timeline t
                 JOIN dim.actor_role r ON r.actor_key = t.actor_key
+                WHERE (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                 GROUP BY 1
             )
             SELECT analytics.label_object(l.object_type)        AS prozess,
@@ -79,7 +93,8 @@ public sealed class DiscoveryRepository
             LEFT JOIN roles r ON r.object_type = l.object_type
             ORDER BY l.cases DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>
@@ -94,7 +109,7 @@ public sealed class DiscoveryRepository
     /// cases would suppress exactly the relations the question is about, and would answer "nobody approves anything".
     /// </para>
     /// </remarks>
-    public Task<List<Dictionary<string, object?>>> DecisionsAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> DecisionsAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -102,12 +117,18 @@ public sealed class DiscoveryRepository
                 SELECT DISTINCT ON (t.object_id) t.object_id, t.object_type, t.actor_key, t.ts
                 FROM analytics.object_timeline t
                 WHERE t.actor_kind = 'human'
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                 ORDER BY t.object_id, t.seq
             ),
             decided AS (
                 SELECT t.object_id, t.actor_key, t.ts, t.event_type
                 FROM analytics.object_timeline t
                 WHERE t.actor_kind = 'human'
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                   AND (t.raw_event_type LIKE '%approved%' OR t.raw_event_type LIKE '%granted%'
                        OR t.raw_event_type LIKE '%released%' OR t.raw_event_type LIKE '%rejected%'
                        OR t.raw_event_type LIKE '%discarded%')
@@ -139,7 +160,8 @@ public sealed class DiscoveryRepository
             WHERE rang <= 12
             ORDER BY object_type, wie_oft DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>
@@ -149,7 +171,7 @@ public sealed class DiscoveryRepository
     /// The handover matrix only shows direct passes. Real dependencies are wider — two people can never hand over to
     /// each other and still be unable to finish without one another. This is the pairing that shows that.
     /// </remarks>
-    public Task<List<Dictionary<string, object?>>> CollaborationAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> CollaborationAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -157,6 +179,9 @@ public sealed class DiscoveryRepository
                 SELECT DISTINCT t.object_id, t.object_type, t.actor_key
                 FROM analytics.object_timeline t
                 WHERE t.actor_kind = 'human'
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
             ),
             -- Grouped on the keys, labelled afterwards. The other way round runs person_with_role over every pair
             -- row before aggregating — four correlated lookups times a few thousand pairs, which turned a 7 ms
@@ -176,7 +201,8 @@ public sealed class DiscoveryRepository
             FROM pairs
             ORDER BY gemeinsame_faelle DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>What the durations are measured against — the calendar, in words.</summary>
@@ -189,7 +215,7 @@ public sealed class DiscoveryRepository
         Query.RunAsync(_factory, "SELECT * FROM analytics.calendar_summary", ct);
 
     /// <summary>Which groups exist, how many people are in them, and how much of the recorded work they do.</summary>
-    public Task<List<Dictionary<string, object?>>> RolesAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> RolesAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -197,6 +223,9 @@ public sealed class DiscoveryRepository
                 SELECT r.role, count(*) AS events, count(DISTINCT e.actor_key) AS active_actors
                 FROM ocel.event e
                 JOIN dim.actor_role r ON r.actor_key = e.actor_key
+                WHERE (@periodFrom::timestamptz IS NULL OR e.ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR e.ts < @periodUntil)
+                  AND analytics.event_in_group(e.id, @scopeGroup)
                 GROUP BY 1
             ),
             headcount AS (
@@ -214,12 +243,13 @@ public sealed class DiscoveryRepository
                    coalesce(h.members, 0) - coalesce(h.members_present, 0) AS ausgeschieden,
                    w.active_actors                                    AS davon_aktiv,
                    w.events                                           AS schritte,
-                   round(w.events::numeric / sum(w.events) OVER () * 100, 1) AS anteil_prozent
+                   round(w.events::numeric / NULLIF(sum(w.events) OVER (), 0) * 100, 1) AS anteil_prozent
             FROM work w
             LEFT JOIN headcount h ON h.role = w.role
             ORDER BY w.events DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>Who does what: every step, and the role that performs it most.</summary>
@@ -227,7 +257,7 @@ public sealed class DiscoveryRepository
     /// This is the answer to "which workflows are executed by which people" — at the level of the group, which is
     /// both the useful level and the only one this system reports at.
     /// </remarks>
-    public Task<List<Dictionary<string, object?>>> WhoDoesWhatAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> WhoDoesWhatAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -235,13 +265,16 @@ public sealed class DiscoveryRepository
                 SELECT t.event_type, r.role, count(*) AS events, count(DISTINCT t.object_id) AS cases
                 FROM analytics.object_timeline t
                 JOIN dim.actor_role r ON r.actor_key = t.actor_key
+                WHERE (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                 GROUP BY 1, 2
             ),
             totals AS (SELECT event_type, sum(events) AS total FROM per_role GROUP BY 1)
             SELECT analytics.label_activity(p.event_type)                       AS schritt,
                    p.role                                                       AS wer,
                    p.events                                                     AS wie_oft,
-                   round(p.events::numeric / t.total * 100)                     AS anteil_am_schritt,
+                   round(p.events::numeric / NULLIF(t.total, 0) * 100)          AS anteil_am_schritt,
                    -- More than one role doing the same step is either a shared responsibility or an unclear one,
                    -- and the difference is worth a look either way.
                    (SELECT count(*) FROM per_role q WHERE q.event_type = p.event_type) AS rollen_am_schritt
@@ -249,7 +282,8 @@ public sealed class DiscoveryRepository
             JOIN totals t ON t.event_type = p.event_type
             ORDER BY t.total DESC, p.events DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>
@@ -260,7 +294,7 @@ public sealed class DiscoveryRepository
     /// system, a document leaving by mail, a declaration to an authority. They are the outline of the company's
     /// dealings with the outside, and they are recorded precisely because a read is not one.
     /// </remarks>
-    public Task<List<Dictionary<string, object?>>> HandoversAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> HandoversAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -275,19 +309,23 @@ public sealed class DiscoveryRepository
                    max(e.ts)                                      AS zuletzt
             FROM ocel.event e
             LEFT JOIN dim.actor_role r ON r.actor_key = e.actor_key
-            WHERE e.type LIKE '%received%'
+            WHERE (e.type LIKE '%received%'
                OR e.type LIKE '%email-sent%'
                OR e.type LIKE '%handed-over%'
                OR e.type LIKE '%reported%'
-               OR e.type LIKE '%requested%'
+               OR e.type LIKE '%requested%')
+              AND (@periodFrom::timestamptz IS NULL OR e.ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR e.ts < @periodUntil)
+              AND analytics.event_in_group(e.id, @scopeGroup)
             GROUP BY 1, 2, 5
             ORDER BY anzahl DESC
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>Who hands work to whom, between groups rather than between people.</summary>
-    public Task<List<Dictionary<string, object?>>> RoleHandoverMatrixAsync(CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> RoleHandoverMatrixAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -299,12 +337,16 @@ public sealed class DiscoveryRepository
             JOIN dim.actor_role f ON f.actor_key = t.prev_actor
             JOIN dim.actor_role t2 ON t2.actor_key = t.actor_key
             WHERE t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
+              AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
             GROUP BY 1, 2
             HAVING count(DISTINCT t.object_id) >= 5
             ORDER BY uebergaben DESC
             LIMIT 40
             """,
-            ct
+            ct,
+            scope.Parameters()
         );
 
     /// <summary>

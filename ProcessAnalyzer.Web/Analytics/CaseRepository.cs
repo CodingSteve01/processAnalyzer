@@ -18,11 +18,20 @@ public sealed class CaseRepository
 
     public CaseRepository(IDbContextFactory<AppDbContext> factory) => _factory = factory;
 
-    /// <summary>Cases of one type, newest first, optionally only those whose last step is a given activity.</summary>
+    /// <summary>
+    /// Cases of one type, newest first. Optionally only those standing at a given activity, or only those that passed
+    /// through one at any point.
+    /// </summary>
+    /// <remarks>
+    /// The two activity filters answer different questions and both are needed. "Standing at" is the queue in front of
+    /// a step. "Passed through" is what a reader wants after seeing a step in an aggregate: show me those cases. Using
+    /// the first for the second would silently answer with the few cases that happened to stop there.
+    /// </remarks>
     public Task<List<Dictionary<string, object?>>> ListAsync(
         string objectType,
-        Period period,
+        Scope scope,
         string? lastActivity,
+        string? withActivity,
         string? search,
         CancellationToken ct
     ) =>
@@ -35,6 +44,7 @@ public sealed class CaseRepository
                 WHERE t.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
                 ORDER BY t.object_id, t.seq DESC
             )
             SELECT split_part(l.object_id, ':', 2)                       AS nummer,
@@ -50,7 +60,15 @@ public sealed class CaseRepository
             WHERE l.object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(l.object_id, @scopeGroup)
               AND (@lastActivity = '' OR s.event_type = @lastActivity)
+              AND (
+                  @withActivity = ''
+                  OR EXISTS (
+                      SELECT 1 FROM analytics.object_timeline w
+                      WHERE w.object_id = l.object_id AND w.event_type = @withActivity
+                  )
+              )
               AND (@search = '' OR split_part(l.object_id, ':', 2) ILIKE '%' || @search || '%')
             ORDER BY l.last_ts DESC
             LIMIT 200
@@ -59,8 +77,9 @@ public sealed class CaseRepository
             [
                 ("objectType", objectType),
                 ("lastActivity", lastActivity ?? string.Empty),
+                ("withActivity", withActivity ?? string.Empty),
                 ("search", search ?? string.Empty),
-                .. period.Parameters(),
+                .. scope.Parameters(),
             ]
         );
 
@@ -97,7 +116,7 @@ public sealed class CaseRepository
     /// The same headline figures, per week. Without this everything the tool says is a snapshot, and "did it get
     /// better" — the question that follows every change — has no answer at all.
     /// </summary>
-    public Task<List<Dictionary<string, object?>>> TrendAsync(string objectType, Period period, CancellationToken ct) =>
+    public Task<List<Dictionary<string, object?>>> TrendAsync(string objectType, Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,
             """
@@ -107,13 +126,14 @@ public sealed class CaseRepository
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY l.biz_seconds)    AS p50,
                        percentile_cont(0.95) WITHIN GROUP (ORDER BY l.biz_seconds)   AS p95,
                        avg(l.n_events)                                               AS schritte,
-                       count(*) FILTER (WHERE NOT l.has_human)::numeric / count(*)   AS automatisch
+                       count(*) FILTER (WHERE NOT l.has_human)::numeric / NULLIF(count(*), 0)   AS automatisch
                 FROM analytics.object_lifecycle l
                 -- Open cases are excluded here as everywhere: a week that is still running would show a p95 that
                 -- only looks good because its slow cases have not finished yet.
                 WHERE l.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
-                  AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND NOT l.is_open
+                  AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(l.object_id, @scopeGroup) AND NOT l.is_open
                 GROUP BY 1
             ),
             rework AS (
@@ -125,7 +145,8 @@ public sealed class CaseRepository
                       AND (t.raw_event_type LIKE '%discarded%' OR t.raw_event_type LIKE '%rejected%')
                 WHERE l.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
-                  AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil) AND NOT l.is_open
+                  AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(l.object_id, @scopeGroup) AND NOT l.is_open
                 GROUP BY 1
             )
             SELECT w.woche,
@@ -140,6 +161,6 @@ public sealed class CaseRepository
             ORDER BY w.woche
             """,
             ct,
-            [("objectType", objectType), .. period.Parameters()]
+            [("objectType", objectType), .. scope.Parameters()]
         );
 }

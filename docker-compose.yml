@@ -38,7 +38,10 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "5100:5100"
+      # Loopback by default, so "it only runs locally" is true at the network level rather than a hope. A published
+      # port without an address is reachable from the whole network, which is where a sign-in stops being optional:
+      # this dashboard shows who did what, by name. Set PA_BIND=0.0.0.0 to serve others — and then keep the login on.
+      - "${PA_BIND:-127.0.0.1}:5100:5100"
     environment:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=process;Username=processanalyzer;Password=${POSTGRES_PASSWORD}
       # The source is a database, not a share — there is no volume mount here on purpose.
