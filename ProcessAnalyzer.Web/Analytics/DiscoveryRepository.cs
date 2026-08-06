@@ -116,10 +116,18 @@ public sealed class DiscoveryRepository
         Query.RunAsync(
             _factory,
             """
+            -- Who put this in front of somebody: the first human step that is NOT itself a decision.
+            --
+            -- Without that condition an approver becomes the submitter whenever the case reached a person for the first
+            -- time at the approval — a scanned document, a job-created row — and the screen then reports the relationship
+            -- upside down: the manager who releases reads as the one who submitted, and the next approver as the one
+            -- deciding over him. A case whose only human steps are approvals has no submitter, and then it belongs in no
+            -- row at all rather than in a wrong one.
             WITH submitted AS (
                 SELECT DISTINCT ON (t.object_id) t.object_id, t.object_type, t.actor_key, t.ts
                 FROM analytics.object_timeline t
-                WHERE t.actor_kind = 'human'
+                WHERE analytics.is_person(t.actor_key)
+                  AND NOT analytics.is_decision(t.raw_event_type)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
                   AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
@@ -128,13 +136,11 @@ public sealed class DiscoveryRepository
             decided AS (
                 SELECT t.object_id, t.actor_key, t.ts, t.event_type
                 FROM analytics.object_timeline t
-                WHERE t.actor_kind = 'human'
+                WHERE analytics.is_person(t.actor_key)
+                  AND analytics.is_decision(t.raw_event_type)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
                   AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
-                  AND (t.raw_event_type LIKE '%approved%' OR t.raw_event_type LIKE '%granted%'
-                       OR t.raw_event_type LIKE '%released%' OR t.raw_event_type LIKE '%rejected%'
-                       OR t.raw_event_type LIKE '%discarded%')
             ),
             pairs AS (
                 SELECT s.object_type,
@@ -144,7 +150,10 @@ public sealed class DiscoveryRepository
                        count(*) AS wie_oft,
                        percentile_cont(0.5) WITHIN GROUP (ORDER BY analytics.duration_seconds(s.object_type, s.ts, d.ts)) AS wartezeit
                 FROM submitted s
-                JOIN decided d ON d.object_id = s.object_id AND d.actor_key <> s.actor_key
+                -- And the decision has to come after the submission. Without this a case where somebody released
+                -- something in the morning and edited it in the afternoon produced a pair with a waiting time of zero,
+                -- pointing backwards in time.
+                JOIN decided d ON d.object_id = s.object_id AND d.actor_key <> s.actor_key AND d.ts >= s.ts
                 GROUP BY 1, 2, 3, 4
             )
             -- Ranked inside each process. Document approvals outnumber leave approvals by two orders of magnitude,
@@ -185,7 +194,7 @@ public sealed class DiscoveryRepository
             WITH participants AS (
                 SELECT DISTINCT t.object_id, t.object_type, t.actor_key
                 FROM analytics.object_timeline t
-                WHERE t.actor_kind = 'human'
+                WHERE analytics.is_person(t.actor_key)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
                   AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
@@ -384,6 +393,148 @@ public sealed class DiscoveryRepository
     /// are reported rather than resolved by coin toss: <c>richtung_klarheit</c> says how one-sided the pair actually is.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The release ladder: which stages exist, who grants them, how long each one waits.
+    /// </summary>
+    /// <remarks>
+    /// Nothing here is configured. A release stage appears because somebody granted one, the people are the ones who
+    /// actually clicked, and the waiting time is measured from the step before it in the same case. That makes this the
+    /// answer to a question a release matrix in a settings screen cannot answer: not who MAY release, but who does.
+    /// <para>
+    /// A refusal is counted separately rather than netted off. "Granted 77 times, refused 4 times" is a different
+    /// statement from "granted 73 times", and the four are the interesting ones.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ReleaseStagesAsync(Scope scope, CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH steps AS (
+                SELECT t.object_type,
+                       t.object_id,
+                       t.event_type,
+                       t.raw_event_type,
+                       t.actor_key,
+                       analytics.duration_seconds(t.object_type, t.prev_ts, t.ts) AS waited
+                FROM analytics.object_timeline t
+                WHERE analytics.is_decision(t.raw_event_type)
+                  AND analytics.is_person(t.actor_key)
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+            ),
+            per_stage AS (
+                SELECT object_type,
+                       event_type,
+                       count(*)                                                        AS wie_oft,
+                       count(DISTINCT object_id)                                       AS faelle,
+                       count(*) FILTER (WHERE raw_event_type LIKE '%discarded%')        AS verweigert,
+                       count(DISTINCT actor_key)                                       AS personen,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY waited)             AS wartezeit
+                FROM steps
+                GROUP BY 1, 2
+            ),
+            -- Who actually grants this stage, by role, most active first. Roles and not names: the question is which part
+            -- of the company holds a stage, and a name answers that only when one person holds it alone.
+            per_role AS (
+                SELECT s.object_type, s.event_type, r.role, count(*) AS n
+                FROM steps s
+                JOIN dim.actor_role r ON r.actor_key = s.actor_key
+                GROUP BY 1, 2, 3
+            )
+            SELECT analytics.label_object(p.object_type)   AS prozess,
+                   p.object_type                          AS prozess_key,
+                   analytics.label_activity(p.event_type) AS stufe,
+                   p.event_type                           AS stufe_key,
+                   p.wie_oft,
+                   p.faelle,
+                   p.verweigert,
+                   p.personen,
+                   round(p.wartezeit::numeric)             AS wartezeit_sekunden,
+                   (
+                       SELECT string_agg(x.role || ' (' || x.n || ')', ', ' ORDER BY x.n DESC)
+                       FROM (
+                           SELECT role, n FROM per_role q
+                           WHERE q.object_type = p.object_type AND q.event_type = p.event_type
+                           ORDER BY n DESC LIMIT 3
+                       ) x
+                   )                                      AS wer,
+                   -- One person holding a stage alone is not a finding by itself, but it is the shape of a bottleneck and
+                   -- of a four-eyes problem, and it cannot be seen from a count.
+                   p.personen = 1                         AS eine_person
+            FROM per_stage p
+            ORDER BY p.wie_oft DESC
+            LIMIT 60
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>Which release stage follows which — the ladder as it is actually climbed.</summary>
+    /// <remarks>
+    /// A workflow defines an order; this shows the order that happened, including the pairs the workflow does not
+    /// mention. Both directions of a pair can appear, and that is data rather than noise: it means the stages are not in
+    /// fact ordered.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ReleaseChainAsync(Scope scope, CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH decisions AS (
+                SELECT t.object_type, t.object_id, t.event_type, t.actor_key, t.ts,
+                       row_number() OVER (PARTITION BY t.object_id ORDER BY t.ts, t.event_id) AS seq
+                FROM analytics.object_timeline t
+                WHERE analytics.is_decision(t.raw_event_type)
+                  AND analytics.is_person(t.actor_key)
+                  AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+            )
+            SELECT analytics.label_object(a.object_type)   AS prozess,
+                   a.object_type                          AS prozess_key,
+                   analytics.label_activity(a.event_type) AS von,
+                   analytics.label_activity(b.event_type) AS an,
+                   b.event_type                           AS an_key,
+                   count(*)                               AS wie_oft,
+                   count(*) FILTER (WHERE a.actor_key = b.actor_key) AS dieselbe_person,
+                   round(percentile_cont(0.5) WITHIN GROUP (
+                       ORDER BY analytics.duration_seconds(a.object_type, a.ts, b.ts)
+                   )::numeric)                            AS wartezeit_sekunden
+            FROM decisions a
+            JOIN decisions b ON b.object_id = a.object_id AND b.seq = a.seq + 1
+            GROUP BY 1, 2, 3, 4, 5
+            HAVING count(*) >= 3
+            ORDER BY count(*) DESC
+            LIMIT 40
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>Every step with the process it belongs to, so a picture of all processes can lead into one of them.</summary>
+    /// <remarks>
+    /// The combined diagrams draw activities, not processes: a box says "Beleg freigegeben" and nothing about which
+    /// process that box belongs to. Without this map the overview picture is the one place in the tool where a reader can
+    /// see something and not get to it. A step that occurs in several processes is assigned to the one it happens in most
+    /// often — the alternative is a chooser for a click, and a click is not a question.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> StepHomeAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT DISTINCT ON (t.event_type)
+                   analytics.label_activity(t.event_type) AS schritt,
+                   t.event_type                           AS schritt_key,
+                   t.object_type                          AS prozess_key,
+                   analytics.label_object(t.object_type)  AS prozess,
+                   count(*)                               AS wie_oft
+            FROM analytics.object_timeline t
+            GROUP BY t.event_type, t.object_type
+            ORDER BY t.event_type, count(*) DESC
+            """,
+            ct
+        );
+
     public Task<List<Dictionary<string, object?>>> LandscapeAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
             _factory,

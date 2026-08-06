@@ -297,6 +297,7 @@ public sealed class GroupScopeTests
             ON CONFLICT DO NOTHING;
 
             REFRESH MATERIALIZED VIEW analytics.object_timeline;
+            REFRESH MATERIALIZED VIEW dim.actor_identity;
             REFRESH MATERIALIZED VIEW analytics.object_lifecycle;
             """
         );

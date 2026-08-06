@@ -149,6 +149,18 @@ async function renderProcesses() {
        <p class="caveat">Wer gibt wem Arbeit. Klick auf einen Kasten öffnet den Ablauf.</p>
        <div class="model-view model-view-inline" id="drillLandscape"></div>
        <div class="chart-readout" id="drillLandscapeReadout"></div>
+
+       <section id="drillAllSection" hidden>
+         <h3>Alle Abläufe in einem Bild</h3>
+         <p class="caveat">
+           Aus denselben Ereignissen gerechnet, eine Farbe pro Ablauf: wo sich Farben in einem Kasten treffen, arbeiten
+           mehrere Abläufe am selben Schritt. Klick auf einen Kasten öffnet den Ablauf, in dem dieser Schritt meistens
+           vorkommt.
+         </p>
+         <div class="model-tabs" id="drillAllTabs"></div>
+         <div id="drillAll"></div>
+       </section>
+
        <h3>Die Abläufe im Einzelnen</h3>`
     : '';
 
@@ -174,6 +186,10 @@ async function renderProcesses() {
     : '<p class="empty">Noch keine Prozesse im Spiegel.</p>') + boundarySection(rowsOf(boundary));
 
   if (rows.length) {
+    // The mined pictures of everything at once, next to the drawn landscape. The drawn one answers "who gives whom work"
+    // and the mined ones answer "where do the processes touch the same step" — different questions, same level.
+    showLandscapeDiagrams();
+
     // The landscape is a picture like any other here, so it gets the same controls: zoom, reading size, full screen.
     attachViewer($('drillLandscape'), { title: 'Prozesslandschaft' });
     renderLandscape($('drillLandscape'), $('drillLandscapeReadout'), (key) => {
@@ -188,6 +204,69 @@ async function renderProcesses() {
       goTo({ process: card.dataset.process });
     });
   }
+}
+
+/**
+ * The mined pictures of everything at once, on the level where everything at once is the subject.
+ *
+ * These used to be a page of their own, which is why they disappeared when that page did. Inlined and clickable like the
+ * per-process ones, but against a map of every step and the process it belongs to — a box in here says "Beleg freigegeben"
+ * and nothing about which process that is, and a picture a reader can see but not enter is the one dead end left.
+ */
+async function showLandscapeDiagrams() {
+  const [status, home] = await Promise.all([miningStatus(), request('/api/discovery/step-home')]);
+  const host = $('drillAll');
+  if (!host) return;
+
+  const available = (status?.models ?? []).filter((model) => model.available);
+  const views = [
+    ['ocdfg-frequency.svg', 'Wie oft'],
+    ['ocdfg-performance.svg', 'Wie lange'],
+    ['ocpn.svg', 'Als Modell'],
+  ].filter(([name]) => available.some((model) => model.name === name));
+
+  if (!views.length) {
+    noteGap('die Bilder über alle Abläufe sind noch nicht gerechnet');
+    return;
+  }
+
+  const steps = rowsOf(home).map((row) => ({
+    key: row.schritt_key,
+    label: row.schritt,
+    process: row.prozess_key,
+    processLabel: row.prozess,
+  }));
+
+  $('drillAllSection').hidden = false;
+  $('drillAllTabs').innerHTML = views
+    .map(
+      ([name, label], index) =>
+        `<button type="button" class="model-tab${index === 0 ? ' active' : ''}" data-file="${escape(name)}">${label}</button>`
+    )
+    .join('');
+
+  const paint = async (name) => {
+    const model = available.find((candidate) => candidate.name === name);
+    if (!model) return;
+    await paintInto(
+      { host: 'drillAll', box: 'drillAllBox', hint: 'drillAllHint', tabs: 'drillAllTabs' },
+      model,
+      'Alle Abläufe',
+      () => wireDiagram(null, 'drillAllBox', steps)
+    );
+    if ($('drillAllHint').textContent.startsWith('Ein Klick'))
+      $('drillAllHint').textContent = 'Ein Klick auf einen Kasten öffnet den Ablauf, in dem dieser Schritt zu Hause ist.';
+  };
+
+  for (const tab of $('drillAllTabs').querySelectorAll('.model-tab')) {
+    tab.addEventListener('click', () => {
+      for (const other of $('drillAllTabs').querySelectorAll('.model-tab')) other.classList.remove('active');
+      tab.classList.add('active');
+      paint(tab.dataset.file);
+    });
+  }
+
+  await paint(views[0][0]);
 }
 
 /** What crosses the company boundary. A statement about the landscape, so it belongs to the landscape. */
@@ -901,7 +980,7 @@ async function showProcessDiagram(process, label) {
 
   const available = (status?.models ?? []).filter((model) => model.available);
   const entry = (status?.stats?.processes ?? []).find((row) => row.object_type === label);
-  const file = entry?.files?.bpmn ?? entry?.files?.main ?? entry?.files?.frequency;
+  const file = entry?.files?.flow ?? entry?.files?.main ?? entry?.files?.frequency;
   const model = file ? available.find((candidate) => candidate.name === file) : null;
 
   if (!model) {
@@ -914,10 +993,14 @@ async function showProcessDiagram(process, label) {
   // Every rendering of THIS process, in one place. The diagram page used to own this switch, which meant leaving the
   // process to see it drawn differently and finding your way back afterwards.
   const renderings = [
-    ['bpmn', 'BPMN'],
+    // First, because it is the only one that cannot be wrong about the process: box A was followed by box B this many
+    // times. Everything after it generalises — invents gateways, inserts silent steps, drops rare paths.
+    ['flow', 'Fluss'],
+    ['flowTime', 'Fluss nach Dauer'],
     ['main', 'Hauptpfade'],
     ['frequency', 'Alle Pfade'],
     ['performance', 'Nach Dauer'],
+    ['bpmn', 'BPMN'],
     ['petri', 'Petri-Netz'],
   ].filter(([key]) => entry?.files?.[key] && available.some((row) => row.name === entry.files[key]));
 
@@ -952,23 +1035,52 @@ async function showProcessDiagram(process, label) {
  * no such labels on every node, and then the picture is simply a picture.
  */
 async function paintDiagram(model, process, label) {
-  const host = $('drillDiagram');
+  await paintInto(
+    { host: 'drillDiagram', box: 'drillDiagramBox', hint: 'drillDiagramHint', tabs: 'drillDiagramTabs' },
+    model,
+    `Ablauf ${label ?? process}`,
+    () => wireDiagram(process)
+  );
+}
+
+/**
+ * Draws a rendering into a picture box, reusing the box itself.
+ *
+ * The box is created once and only its contents are replaced afterwards. That is not a micro-optimisation: in the
+ * preview the box has been MOVED into the overlay, so rebuilding the surrounding markup would create a second box in the
+ * page while the reader keeps looking at the old one in front of them — switching renderings inside the preview did
+ * nothing at all. Same element, new picture, and the viewer that is attached to it keeps its state.
+ *
+ * Inlined rather than shown as an image, because an image cannot be clicked: the boxes carry the same German labels the
+ * tables use — we generate both — so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
+ * no such labels on every node, and then the picture is simply a picture.
+ */
+async function paintInto(ids, model, title, wire) {
+  const host = $(ids.host);
   if (!host || !model) return;
+
+  // getElementById directly: $() throws on a missing id, which is right at a call site that expects the element and
+  // wrong here, where its absence is the signal to create it.
+  if (!document.getElementById(ids.box)) {
+    host.innerHTML = `<div class="model-view model-view-inline" id="${ids.box}"></div>
+      <p class="hint" id="${ids.hint}"></p>`;
+    // The rendering switch travels into the preview with the picture, so a reader can change the drawing without
+    // leaving the large view first.
+    attachViewer($(ids.box), { title, switcher: $(ids.tabs) });
+  }
 
   let svg;
   try {
     const response = await fetch(model.url);
     svg = await response.text();
   } catch {
-    host.innerHTML = `<div class="model-view model-view-inline"><img class="model-image" src="${model.url}" alt="Ablauf" /></div>`;
+    $(ids.box).innerHTML = `<img class="model-image" src="${model.url}" alt="${escape(title)}" />`;
     return;
   }
 
-  host.innerHTML = `<div class="model-view model-view-inline" id="drillDiagramBox">${svg}</div>
-    <p class="hint" id="drillDiagramHint"></p>`;
-  attachViewer($('drillDiagramBox'), { title: `Ablauf ${label ?? process}` });
-  const clickable = wireDiagram(process);
-  $('drillDiagramHint').textContent = clickable
+  $(ids.box).innerHTML = svg;
+  const clickable = wire();
+  $(ids.hint).textContent = clickable
     ? 'Ein Klick auf einen Kasten führt zu den Fällen, die durch diesen Schritt gelaufen sind.'
     : 'In dieser Darstellung tragen nicht alle Knoten einen Schritt: runde Knoten sind Zustände, leere Kästen sind Verzweigungen des Miners.';
 }
@@ -980,22 +1092,26 @@ async function paintDiagram(model, process, label) {
  * E=335"), so the label is matched by prefix against the steps of this process — no id is available in the picture, and
  * inventing one on the miner side would mean the two sides agreeing on a format forever.
  */
-function wireDiagram(process) {
-  const box = $('drillDiagramBox');
+function wireDiagram(process, boxId = 'drillDiagramBox', steps = null) {
+  const box = $(boxId);
   if (!box) return false;
 
-  const steps = [...document.querySelectorAll('#drillBody tr[data-step]')].map((row) => ({
-    key: row.dataset.step,
-    label: row.dataset.label,
-  }));
-  if (!steps.length) return false;
+  // Either the steps of the process on screen, or a map handed in — the combined pictures draw steps from every process
+  // at once, and each of those has to lead into its own.
+  const list =
+    steps ??
+    [...document.querySelectorAll('#drillBody tr[data-step]')].map((row) => ({
+      key: row.dataset.step,
+      label: row.dataset.label,
+    }));
+  if (!list.length) return false;
 
   let wired = 0;
 
   for (const node of box.querySelectorAll('g.node')) {
     const text = [...node.querySelectorAll('text')].map((element) => element.textContent).join(' ');
     // Longest label first: "Freigabe erteilt" would otherwise swallow "Freigabe erteilt (Aufkäufer)".
-    const match = steps
+    const match = list
       .filter((step) => step.label && text.includes(step.label))
       .sort((a, b) => b.label.length - a.label.length)[0];
     if (!match) continue;
@@ -1004,7 +1120,8 @@ function wireDiagram(process) {
     wired++;
     node.addEventListener('click', () => {
       names.step = match.label;
-      goTo({ process, step: match.key });
+      names.process = match.processLabel ?? names.process;
+      goTo({ process: match.process ?? process, step: match.key });
     });
   }
 

@@ -17,9 +17,25 @@ import { renderNaming, initNaming } from './naming.js';
 import { renderDrill, initDrill, drillTo } from './drill.js';
 import { renderReport, initReport } from './report.js';
 import { renderNow } from './now.js';
+import { renderActors } from './actors.js';
 import { whenOpened } from './views.js';
 
 const nf = new Intl.NumberFormat('de-DE');
+
+/**
+ * A duration in the unit it deserves.
+ *
+ * Releases happen minutes apart, and rounded to hours every one of them read "0,0 h" — a column of zeroes that looks
+ * like a broken measurement rather than a fast step.
+ */
+function duration(seconds) {
+  if (seconds === null || seconds === undefined) return '—';
+  const value = Number(seconds);
+  if (value < 90) return `${Math.round(value)} s`;
+  if (value < 5400) return `${Math.round(value / 60)} min`;
+  if (value < 360000) return `${(value / 3600).toFixed(1)} h`;
+  return `${nf.format(Math.round(value / 3600))} h`;
+}
 
 /** Puts a computed sentence above a panel. Empty text removes the element rather than leaving a blank line. */
 function reading(id, text) {
@@ -141,12 +157,88 @@ async function renderPeople() {
   );
   wireDrill('collaboration');
 
+  // Loaded alongside: they belong to this screen, and the actor list is the only panel here that can be edited.
+  renderActors();
+  renderReleases();
+
   $('roleHandovers').innerHTML = table(roleHandovers, [
     { label: 'von', render: (r) => escape(r.von) },
     { label: 'an', render: (r) => escape(r.an) },
     { label: 'Fälle', numeric: true, render: (r) => nf.format(r.faelle) },
     { label: 'Übergaben', numeric: true, render: (r) => nf.format(r.uebergaben) },
   ]);
+}
+
+/**
+ * The release ladder, with the people on it.
+ *
+ * The interesting rows are the ones a settings screen cannot show: a stage held by exactly one person, a stage that is
+ * refused rather than granted, and two stages that arrive in either order — which means they are not a ladder at all.
+ */
+async function renderReleases() {
+  const [stages, chain] = await Promise.all([
+    request(`/api/discovery/release-stages${scopeQuery()}`),
+    request(`/api/discovery/release-chain${scopeQuery()}`),
+  ]);
+  if (!stages || !chain) return;
+
+  const alone = stages.filter((row) => row.eine_person);
+  const refused = stages.reduce((sum, row) => sum + Number(row.verweigert ?? 0), 0);
+  reading(
+    'rReleaseStages',
+    stages.length
+      ? `${nf.format(stages.length)} Freigabestufen im Log. ${
+          alone.length
+            ? `${nf.format(alone.length)} davon hängen an einer einzigen Person: ${alone
+                .slice(0, 3)
+                .map((row) => `„${row.stufe}"`)
+                .join(', ')}. `
+            : 'Keine hängt an einer einzigen Person. '
+        }${refused ? `${nf.format(refused)} Freigaben wurden verweigert.` : 'Keine Freigabe wurde verweigert.'}`
+      : null
+  );
+
+  $('releaseStages').innerHTML = table(
+    stages,
+    [
+      { label: 'Stufe', render: (r) => `<strong>${escape(r.stufe)}</strong>` },
+      { label: 'Ablauf', render: (r) => escape(r.prozess) },
+      { label: 'wer', render: (r) => escape(r.wer ?? '—') },
+      { label: 'erteilt', numeric: true, render: (r) => nf.format(r.wie_oft) },
+      {
+        label: 'verweigert',
+        numeric: true,
+        render: (r) => (Number(r.verweigert) ? `<span class="attention">${nf.format(r.verweigert)}</span>` : '—'),
+      },
+      {
+        label: 'Personen',
+        numeric: true,
+        render: (r) => (r.eine_person ? `<span class="attention">1</span>` : nf.format(r.personen)),
+      },
+      { label: 'Wartezeit davor', numeric: true, render: (r) => duration(r.wartezeit_sekunden) },
+    ],
+    (row) => (row.prozess_key && row.stufe_key ? { process: row.prozess_key, step: row.stufe_key } : null)
+  );
+  wireDrill('releaseStages');
+
+  $('releaseChain').innerHTML = table(
+    chain,
+    [
+      { label: 'nach', render: (r) => escape(r.von) },
+      { label: 'kommt', render: (r) => escape(r.an) },
+      { label: 'Ablauf', render: (r) => escape(r.prozess) },
+      { label: 'wie oft', numeric: true, render: (r) => nf.format(r.wie_oft) },
+      {
+        label: 'dieselbe Person',
+        numeric: true,
+        render: (r) =>
+          Number(r.dieselbe_person) ? `<span class="attention">${nf.format(r.dieselbe_person)}</span>` : '—',
+      },
+      { label: 'dazwischen', numeric: true, render: (r) => duration(r.wartezeit_sekunden) },
+    ],
+    (row) => (row.prozess_key && row.an_key ? { process: row.prozess_key, step: row.an_key } : null)
+  );
+  wireDrill('releaseChain');
 }
 
 /** What the numbers rest on: which calendar, what is not instrumented, what the words mean. */

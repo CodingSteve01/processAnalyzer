@@ -61,8 +61,11 @@ public sealed class PostgresFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync(
             // The derived tables go too. A test that seeds ocel.* directly would otherwise leave rows behind and the
             // next test would measure them without ever having written them.
+            // dim.actor_kind_override is hand-written and would otherwise outlive the test that wrote it: one test
+            // marking an account as a bot would silently change what the next one measures.
             "TRUNCATE journal.event_object, journal.event, sync.run, sync.cursor, "
-                + "ocel.e2o, ocel.event, ocel.object, ocel.type_registry RESTART IDENTITY CASCADE"
+                + "ocel.e2o, ocel.event, ocel.object, ocel.type_registry, dim.actor_kind_override "
+                + "RESTART IDENTITY CASCADE"
         );
     }
 

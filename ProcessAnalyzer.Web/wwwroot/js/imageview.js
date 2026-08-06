@@ -13,7 +13,9 @@ const ZoomSteps = [1, 1.5, 2, 3, 4, 6, 8];
  * Attaches the viewer to a container that holds one picture.
  *
  * @param {HTMLElement} container element containing (or to contain) the image or inline SVG
- * @param {{title?: string}} options
+ * @param {{title?: string, switcher?: HTMLElement | null}} options `switcher` is a row of buttons that chooses which
+ *   rendering is shown; it travels into the preview with the picture, because changing the drawing is exactly what
+ *   somebody wants while looking at the large view.
  * @returns {{setZoom: (factor: number) => void}} handle for callers that want to reset the view
  */
 export function attachViewer(container, options = {}) {
@@ -95,7 +97,7 @@ export function attachViewer(container, options = {}) {
       state.natural = true;
       apply();
     }
-    if (act === 'preview') openPreview(container, toolbar, options.title ?? 'Diagramm', apply);
+    if (act === 'preview') openPreview(container, toolbar, options.title ?? 'Diagramm', apply, options.switcher);
   });
 
   // Ctrl + wheel only: the page scrolls with the wheel, and a picture that swallows that gesture traps the reader.
@@ -146,12 +148,13 @@ export function attachViewer(container, options = {}) {
  * The viewer moves into the overlay rather than being rebuilt inside it — one instance, one zoom state, and the controls
  * are the same ones the reader was already using.
  */
-function openPreview(container, toolbar, title, apply) {
+function openPreview(container, toolbar, title, apply, switcher = null) {
   const overlay = document.createElement('div');
   overlay.className = 'preview-overlay';
   overlay.innerHTML = `
     <div class="preview-head">
       <span class="preview-title"></span>
+      <span class="preview-switcher"></span>
       <span class="preview-tools"></span>
       <span class="spacer"></span>
       <button type="button" class="preview-close" aria-label="Vorschau schliessen">×</button>
@@ -166,6 +169,13 @@ function openPreview(container, toolbar, title, apply) {
   toolbar.parentNode.insertBefore(toolbarSlot, toolbar);
   container.parentNode.insertBefore(containerSlot, container);
 
+  // The switch comes along when there is one, and it keeps its listeners because it is moved rather than rebuilt.
+  const switcherSlot = switcher ? document.createComment('viewer-switcher') : null;
+  if (switcher && switcherSlot) {
+    switcher.parentNode.insertBefore(switcherSlot, switcher);
+    overlay.querySelector('.preview-switcher').append(switcher);
+  }
+
   overlay.querySelector('.preview-tools').append(toolbar);
   overlay.querySelector('.preview-body').append(container);
   container.classList.add('model-view-preview');
@@ -174,6 +184,10 @@ function openPreview(container, toolbar, title, apply) {
 
   const close = () => {
     container.classList.remove('model-view-preview');
+    if (switcher && switcherSlot) {
+      switcherSlot.parentNode.insertBefore(switcher, switcherSlot);
+      switcherSlot.remove();
+    }
     toolbarSlot.parentNode.insertBefore(toolbar, toolbarSlot);
     containerSlot.parentNode.insertBefore(container, containerSlot);
     toolbarSlot.remove();

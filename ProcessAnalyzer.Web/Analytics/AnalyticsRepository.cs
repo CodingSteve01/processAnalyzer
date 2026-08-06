@@ -90,7 +90,7 @@ public sealed class AnalyticsRepository
                    event_type                                                        AS event_type_key,
                    count(*)                                                          AS events,
                    count(DISTINCT object_id)                                         AS objects,
-                   count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0)  AS manual_share,
+                   count(*) FILTER (WHERE analytics.is_person(actor_key))::numeric / NULLIF(count(*), 0)  AS manual_share,
                    count(*) FILTER (WHERE seq = 1)                                   AS as_first_step
             FROM analytics.object_timeline
             WHERE object_type = @objectType
@@ -431,7 +431,7 @@ public sealed class AnalyticsRepository
             WITH decided AS (
                 SELECT t.object_type, t.object_id, t.actor_key, t.event_type, t.ts, t.event_id
                 FROM analytics.object_timeline t
-                WHERE t.actor_kind = 'human'
+                WHERE analytics.is_person(t.actor_key)
                   AND (t.raw_event_type LIKE '%approved%' OR t.raw_event_type LIKE '%granted%'
                        OR t.raw_event_type LIKE '%released%')
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
@@ -441,7 +441,7 @@ public sealed class AnalyticsRepository
             first_touch AS (
                 SELECT DISTINCT ON (t.object_id) t.object_id, t.actor_key, t.event_type, t.event_id
                 FROM analytics.object_timeline t
-                WHERE t.actor_kind = 'human'
+                WHERE analytics.is_person(t.actor_key)
                 ORDER BY t.object_id, t.seq
             )
             SELECT analytics.label_object(d.object_type)     AS prozess,
@@ -521,7 +521,7 @@ public sealed class AnalyticsRepository
             SELECT date_trunc('day', t.ts)::date                                       AS tag,
                    count(*)                                                            AS wie_oft,
                    count(DISTINCT t.object_id)                                         AS faelle,
-                   count(*) FILTER (WHERE t.actor_kind = 'human')::numeric
+                   count(*) FILTER (WHERE analytics.is_person(t.actor_key))::numeric
                        / NULLIF(count(*), 0)                                           AS von_hand
             FROM analytics.object_timeline t
             WHERE t.object_type = @objectType
@@ -621,7 +621,7 @@ public sealed class AnalyticsRepository
             """
             SELECT count(*)                                                             AS cases,
                    count(*) FILTER (WHERE NOT has_human)::numeric / NULLIF(count(*), 0)  AS straight_through_share,
-                   (SELECT count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0)
+                   (SELECT count(*) FILTER (WHERE analytics.is_person(actor_key))::numeric / NULLIF(count(*), 0)
                     FROM analytics.object_timeline WHERE object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
@@ -667,7 +667,7 @@ public sealed class AnalyticsRepository
             act AS (
                 SELECT event_type,
                        count(*) AS freq,
-                       count(*) FILTER (WHERE actor_kind = 'human')::numeric / NULLIF(count(*), 0) AS manual
+                       count(*) FILTER (WHERE analytics.is_person(actor_key))::numeric / NULLIF(count(*), 0) AS manual
                 FROM analytics.object_timeline WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
