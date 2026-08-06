@@ -27,6 +27,15 @@ public sealed class ProcessAnalyzerOptions
     public string? SourceLinks { get; set; }
 
     /// <summary>
+    /// How often at most the analytics views are rebuilt, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// A rebuild costs the whole log rather than the new part of it, and the pull runs every minute. This is the ceiling
+    /// that keeps a busy loop from spending its life rebuilding; a reader asking for a projection bypasses it.
+    /// </remarks>
+    public int RefreshIntervalSeconds { get; set; } = 120;
+
+    /// <summary>
     /// Key for the actor pseudonyms. Set once and keep it: rotating it changes every actor_key, which breaks the
     /// continuity of every handover statistic that was computed before the change.
     /// </summary>

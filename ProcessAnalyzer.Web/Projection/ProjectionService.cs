@@ -30,6 +30,9 @@ public sealed class ProjectionService
 
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
+    /// <summary>When the views were last rebuilt. Static, because the ceiling is per process, not per scope.</summary>
+    private static DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
+
     private readonly IDbContextFactory<AppDbContext> _factory;
     private readonly ProcessAnalyzerOptions _options;
     private readonly ILogger<ProjectionService> _logger;
@@ -48,7 +51,11 @@ public sealed class ProjectionService
     /// <summary>
     /// Projects everything pending and refreshes the analytics views. Returns how many events were projected.
     /// </summary>
-    public async Task<int> ProjectPendingAsync(CancellationToken ct)
+    public async Task<int> ProjectPendingAsync(CancellationToken ct) => await ProjectPendingAsync(false, ct);
+
+    /// <param name="force">Refresh the views even when the interval has not elapsed. A reader waiting for an answer
+    /// outranks the ceiling that exists to protect the pull loop.</param>
+    public async Task<int> ProjectPendingAsync(bool force, CancellationToken ct)
     {
         // Two projections at once would each re-read the other's pending set and duplicate the work.
         if (!await Gate.WaitAsync(0, ct))
@@ -68,8 +75,28 @@ public sealed class ProjectionService
 
             if (total > 0)
             {
-                await RefreshViewsAsync(ct);
-                _logger.LogInformation("Projected {Count} events and refreshed the analytics views", total);
+                // Rebuilding all four views costs the whole log, not the new part of it, and the pull runs every minute.
+                // At the current volume that is a second; at ten times it is ten, and the loop would spend its life
+                // rebuilding. So it is bounded per unit of time: at most once per RefreshIntervalSeconds, and always
+                // when a reader asks through /api/projection/run.
+                //
+                // This is a ceiling, not a fix. The fix is to maintain the timeline and the lifecycle per touched case
+                // instead of rebuilding them, and that is the prerequisite for mirroring years rather than days.
+                var since = DateTimeOffset.UtcNow - _lastRefresh;
+                if (force || since >= TimeSpan.FromSeconds(_options.RefreshIntervalSeconds))
+                {
+                    await RefreshViewsAsync(ct);
+                    _lastRefresh = DateTimeOffset.UtcNow;
+                    _logger.LogInformation("Projected {Count} events and refreshed the analytics views", total);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "Projected {Count} events; the views were refreshed {Age:0}s ago and stay as they are",
+                        total,
+                        since.TotalSeconds
+                    );
+                }
             }
 
             return total;

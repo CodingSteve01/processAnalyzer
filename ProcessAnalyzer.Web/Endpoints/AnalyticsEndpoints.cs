@@ -35,7 +35,7 @@ public static class AnalyticsEndpoints
         group.MapPost(
             "/projection/run",
             async (ProjectionService projection, CancellationToken token) =>
-                Results.Ok(new { projected = await projection.ProjectPendingAsync(token) })
+                Results.Ok(new { projected = await projection.ProjectPendingAsync(force: true, token) })
         );
 
         group.MapPost(
@@ -167,6 +167,30 @@ public static class AnalyticsEndpoints
             "/automation-candidates",
             (repo, type, scope, token) => repo.AutomationCandidatesAsync(type, scope, token)
         );
+        // One person, at the level of the step. Not through MapScoped: there is no object type here, a person works
+        // across processes.
+        group.MapGet(
+            "/actor",
+            async (
+                AnalyticsRepository repo,
+                string? key,
+                string? from,
+                string? until,
+                string? group,
+                CancellationToken t
+            ) =>
+                string.IsNullOrWhiteSpace(key)
+                    ? Results.BadRequest(new { error = "key ist erforderlich" })
+                    : Results.Ok(
+                        new
+                        {
+                            key,
+                            name = await repo.ActorNameAsync(key, t),
+                            rows = await repo.ActorProfileAsync(key, Scope.FromQuery(from, until, group), t),
+                        }
+                    )
+        );
+
         // Not through MapScoped: this one needs the step as well as the process.
         group.MapGet(
             "/activity-trend",

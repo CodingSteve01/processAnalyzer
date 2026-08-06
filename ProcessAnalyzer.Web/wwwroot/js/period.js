@@ -39,6 +39,26 @@ export function currentGroup() {
   return group || null;
 }
 
+/**
+ * Sets the window from somewhere else in the application, and tells everybody.
+ *
+ * A chart that cannot change the scope is a picture. Clicking a day, or dragging across three weeks, is the same act as
+ * typing two dates — so it goes through the same state, the controls show it, and every panel follows.
+ */
+export function setPeriod(from, until) {
+  state = { preset: 'custom', from: from ?? '', until: until ?? '' };
+
+  const preset = document.getElementById('periodPreset');
+  const fromInput = document.getElementById('periodFrom');
+  const untilInput = document.getElementById('periodUntil');
+  if (fromInput) fromInput.value = state.from;
+  if (untilInput) untilInput.value = state.until;
+  // No preset matches a typed window, and leaving "Alles" selected would claim the opposite of what is applied.
+  if (preset && !Presets.some((entry) => entry.id === state.preset)) preset.selectedIndex = 0;
+
+  onChange();
+}
+
 /** What is currently applied, in German, for the caveat line under a panel heading. */
 export function periodLabel() {
   const { from, until } = resolve();

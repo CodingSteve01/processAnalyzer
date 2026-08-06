@@ -16,7 +16,7 @@
 // clickable and the way back is visible.
 
 import { request } from './api.js';
-import { periodQuery, periodLabel } from './period.js';
+import { periodQuery, periodLabel, setPeriod } from './period.js';
 import { $, escape } from './utils.js';
 import { drawLineChart } from './linechart.js';
 import * as readings from './readings.js';
@@ -39,7 +39,7 @@ const moment = (value) => (value ? df.format(new Date(value)) : '—');
 const rowsOf = (response) => (Array.isArray(response) ? response : (response?.rows ?? []));
 
 /** Labels for the crumbs, kept so a step or case reads as a word rather than a key while the reader is inside it. */
-const names = { process: null, step: null, case: null };
+const names = { process: null, step: null, case: null, actor: null };
 
 /** Object type to URL template, from the installation's configuration. Empty when nothing is configured. */
 let sourceLinks = {};
@@ -54,11 +54,18 @@ function path() {
       .filter((part) => part.startsWith(prefix))
       .map((part) => decodeURIComponent(part.slice(prefix.length)))[0] ?? null;
 
-  return { process: grab('p:'), step: grab('s:'), case: grab('f:') };
+  return { process: grab('p:'), step: grab('s:'), case: grab('f:'), actor: grab('x:') };
 }
 
-function goTo({ process = null, step = null, case: caseId = null }) {
+function goTo({ process = null, step = null, case: caseId = null, actor = null }) {
   const parts = ['prozesse'];
+  // A person is not inside a process: they work across them. So this is its own branch of the path rather than a level
+  // under a process.
+  if (actor) {
+    parts.push(`x:${encodeURIComponent(actor)}`);
+    window.location.hash = parts.join('/');
+    return;
+  }
   if (process) parts.push(`p:${encodeURIComponent(process)}`);
   if (process && step) parts.push(`s:${encodeURIComponent(step)}`);
   if (process && step && caseId) parts.push(`f:${encodeURIComponent(caseId)}`);
@@ -71,6 +78,7 @@ export async function renderDrill() {
   const here = path();
   renderCrumbs(here);
 
+  if (here.actor) return renderActor(here.actor);
   if (!here.process) return renderProcesses();
   if (!here.step) return renderProcess(here.process);
   if (!here.case) return renderStep(here.process, here.step);
@@ -79,6 +87,7 @@ export async function renderDrill() {
 
 function renderCrumbs(here) {
   const crumbs = [{ label: 'Alle Prozesse', target: {} }];
+  if (here.actor) crumbs.push({ label: names.actor ?? here.actor, target: { actor: here.actor } });
   if (here.process)
     crumbs.push({ label: names.process ?? here.process, target: { process: here.process } });
   if (here.step)
@@ -556,11 +565,58 @@ async function showProcessDiagram(process, label) {
   const file = entry?.files?.main ?? entry?.files?.frequency;
   const model = file ? available.find((candidate) => candidate.name === file) : null;
 
-  host.innerHTML = model
-    ? `<div class="model-view model-view-inline"><img class="model-image" src="${model.url}" alt="Ablauf ${escape(
-        label ?? process
-      )}" /></div>`
-    : '<p class="empty">Für diesen Ablauf wurde noch kein Diagramm gerechnet.</p>';
+  if (!model) {
+    host.innerHTML = '<p class="empty">Für diesen Ablauf wurde noch kein Diagramm gerechnet.</p>';
+    return;
+  }
+
+  // Inlined rather than shown as an image, because an image cannot be clicked. The boxes carry the same German labels
+  // the tables use — we generate both — so each one can be matched back to a step and lead into it.
+  let svg;
+  try {
+    const response = await fetch(model.url);
+    svg = await response.text();
+  } catch {
+    host.innerHTML = `<div class="model-view model-view-inline"><img class="model-image" src="${model.url}" alt="Ablauf" /></div>`;
+    return;
+  }
+
+  host.innerHTML = `<div class="model-view model-view-inline" id="drillDiagramBox">${svg}</div>
+    <p class="hint">Ein Klick auf einen Kasten führt zu den Fällen, die durch diesen Schritt gelaufen sind.</p>`;
+  wireDiagram(process);
+}
+
+/**
+ * Makes the boxes of a mined diagram lead somewhere.
+ *
+ * Graphviz writes one group per node with its text inside. The text is the label plus the count ("Beleg zugeordnet
+ * E=335"), so the label is matched by prefix against the steps of this process — no id is available in the picture, and
+ * inventing one on the miner side would mean the two sides agreeing on a format forever.
+ */
+function wireDiagram(process) {
+  const box = $('drillDiagramBox');
+  if (!box) return;
+
+  const steps = [...document.querySelectorAll('#drillBody tr[data-step]')].map((row) => ({
+    key: row.dataset.step,
+    label: row.dataset.label,
+  }));
+  if (!steps.length) return;
+
+  for (const node of box.querySelectorAll('g.node')) {
+    const text = [...node.querySelectorAll('text')].map((element) => element.textContent).join(' ');
+    // Longest label first: "Freigabe erteilt" would otherwise swallow "Freigabe erteilt (Aufkäufer)".
+    const match = steps
+      .filter((step) => step.label && text.includes(step.label))
+      .sort((a, b) => b.label.length - a.label.length)[0];
+    if (!match) continue;
+
+    node.classList.add('node-clickable');
+    node.addEventListener('click', () => {
+      names.step = match.label;
+      goTo({ process, step: match.key });
+    });
+  }
 }
 
 /**
@@ -585,21 +641,43 @@ async function drawActivityTrend(process, step) {
   const max = Math.max(...rows.map((row) => Number(row.wie_oft)));
   const dayFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' });
   host.innerHTML = `
-    <div class="daybars">
+    <div class="daybars" id="drillDayBars">
       ${rows
-        .map((row) => {
-          const share = Number(row.von_hand ?? 0);
+        .map((row, index) => {
           const height = Math.max(3, Math.round((Number(row.wie_oft) / max) * 100));
-          return `<span class="daybar" style="height:${height}%"
-                        title="${dayFormat.format(new Date(row.tag))}: ${nf.format(row.wie_oft)}× in ${nf.format(
-                          row.faelle
-                        )} Fällen, ${pf.format(share)} von Hand"></span>`;
+          return `<button type="button" class="daybar" style="height:${height}%" data-day="${index}"
+                          aria-label="${dayFormat.format(new Date(row.tag))}"></button>`;
         })
         .join('')}
     </div>
-    <p class="hint">${dayFormat.format(new Date(rows[0].tag))} bis ${dayFormat.format(
-      new Date(rows[rows.length - 1].tag)
-    )}, höchster Tag ${nf.format(max)}×. Beim Zeigen steht der Tag darunter.</p>`;
+    <div class="chart-readout" id="drillDayReadout">
+      ${dayFormat.format(new Date(rows[0].tag))} bis ${dayFormat.format(new Date(rows[rows.length - 1].tag))},
+      höchster Tag ${nf.format(max)}×. Ein Klick auf einen Balken setzt den Zeitraum auf diesen Tag.
+    </div>`;
+
+  // A tooltip of our own rather than the browser's: the browser's takes a second to appear, cannot be read while
+  // moving along the bars, and disappears before the reader has compared two of them.
+  const readout = $('drillDayReadout');
+  const rest = readout.innerHTML;
+  for (const bar of $('drillDayBars').querySelectorAll('.daybar')) {
+    const row = rows[Number(bar.dataset.day)];
+    const day = new Date(row.tag);
+    bar.addEventListener('mouseenter', () => {
+      readout.innerHTML =
+        `<strong>${dayFormat.format(day)}</strong>: ${nf.format(row.wie_oft)}× in ${nf.format(row.faelle)} Fällen, ` +
+        `${pf.format(Number(row.von_hand ?? 0))} von Hand`;
+    });
+    bar.addEventListener('mouseleave', () => {
+      readout.innerHTML = rest;
+    });
+    // Clicking narrows the whole application to that day, controls included. Everything else on screen follows, which
+    // is the difference between a picture and an instrument.
+    bar.addEventListener('click', () => {
+      const iso = new Date(day.getTime() - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const next = new Date(day.getTime() + 86400000 - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      setPeriod(iso, next);
+    });
+  }
 }
 
 /**
@@ -631,4 +709,76 @@ function caseBar(steps) {
       ${moment(steps[0].wann)} bis ${moment(steps[steps.length - 1].wann)} · gefüllte Marken sind Schritte von Menschen,
       offene sind Automatik. Abstände sind echte Abstände.
     </p>`;
+}
+
+
+// ── one person: what they actually do ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The steps of one person, by process.
+ *
+ * The people screens answered "who works with whom" and "which role does which step" and then stopped. The question
+ * after that is always the same and had nowhere to go: what does this person do. At the level of the step, never at the
+ * level of the keystroke — this is a process tool and it stays one.
+ */
+async function renderActor(actorKey) {
+  const response = await request(
+    `/api/actor?key=${encodeURIComponent(actorKey)}${periodQuery()}`
+  );
+  names.actor = response?.name ?? actorKey;
+  renderCrumbs(path());
+
+  const rows = rowsOf(response);
+  const processes = new Map();
+  for (const row of rows) {
+    const entry = processes.get(row.prozess) ?? { label: row.prozess, key: row.prozess_key, steps: [], events: 0 };
+    entry.steps.push(row);
+    entry.events += Number(row.wie_oft);
+    processes.set(row.prozess, entry);
+  }
+
+  $('drillReading').hidden = rows.length === 0;
+  $('drillReading').textContent = rows.length
+    ? `${nf.format(rows.reduce((sum, row) => sum + Number(row.wie_oft), 0))} Schritte in ` +
+      `${nf.format(processes.size)} Abläufen, ${nf.format(
+        new Set(rows.map((row) => row.schritt)).size
+      )} verschiedene Tätigkeiten.`
+    : '';
+
+  $('drillBody').innerHTML = rows.length
+    ? [...processes.values()]
+        .sort((a, b) => b.events - a.events)
+        .map(
+          (entry) => `
+        <h3>${escape(entry.label)}</h3>
+        <table class="data">
+          <thead><tr><th>Schritt</th><th class="num">wie oft</th><th class="num">Fälle</th>
+                     <th>zuletzt</th><th></th></tr></thead>
+          <tbody>
+            ${entry.steps
+              .map(
+                (step) => `
+              <tr class="clickable" data-step="${escape(step.schritt_key)}" data-label="${escape(step.schritt)}"
+                  data-process="${escape(entry.key)}">
+                <td>${escape(step.schritt)}</td>
+                <td class="num">${nf.format(step.wie_oft)}</td>
+                <td class="num">${nf.format(step.faelle)}</td>
+                <td>${moment(step.zuletzt)}</td>
+                <td class="num"><span class="drill-go">Fälle ›</span></td>
+              </tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>`
+        )
+        .join('')
+    : '<p class="empty">Für diese Person liegen im gewählten Umfang keine Schritte vor.</p>';
+
+  for (const row of $('drillBody').querySelectorAll('tr[data-step]')) {
+    row.addEventListener('click', () => {
+      names.step = row.dataset.label;
+      names.actor = null;
+      goTo({ process: row.dataset.process, step: row.dataset.step });
+    });
+  }
 }

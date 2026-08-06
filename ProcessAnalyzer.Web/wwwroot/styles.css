@@ -866,3 +866,32 @@ table.data tr.selected { background: var(--accent-dim); }
 
 /* Filled means a person did it. The distinction is the whole point of the picture. */
 .casebar-mark.human { background: var(--accent); }
+
+.naming-actions { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+
+/* --- interactive charts ------------------------------------------------------------------------------------------ */
+
+.daybar {
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+
+.daybar:hover,
+.daybar:focus-visible { opacity: 1; outline: none; }
+
+/* The readout under a chart. Our own instead of the browser's tooltip: that one takes a second to appear, cannot be
+   read while moving along the bars, and is gone before two of them have been compared. */
+.chart-readout {
+  min-height: 1.4em;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 4px 0 12px;
+}
+
+/* A box in the mined picture that leads somewhere says so on hover. */
+.node-clickable { cursor: pointer; }
+.node-clickable:hover polygon,
+.node-clickable:hover ellipse { stroke-width: 2.5; }
+.node-clickable:hover text { font-weight: 700; }

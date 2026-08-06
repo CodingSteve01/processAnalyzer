@@ -65,6 +65,10 @@ function renderGaps(gaps) {
     .join('');
 
   $('namingGaps').innerHTML = `
+    <p class="naming-actions">
+      <button type="button" class="btn-primary" id="namingSaveAll">Alle ausgefüllten übernehmen</button>
+      <span class="hint">Enter in einer Zeile speichert nur diese. Getippte Namen bleiben stehen, bis du sie übernimmst.</span>
+    </p>
     <table class="data">
       <thead>
         <tr><th>Art</th><th>technischer Typ</th><th class="num">beobachtet</th>
@@ -72,6 +76,8 @@ function renderGaps(gaps) {
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+  $('namingSaveAll').addEventListener('click', (event) => saveAll(event.currentTarget));
 
   for (const button of $('namingGaps').querySelectorAll('.naming-save')) {
     button.addEventListener('click', () => save(button.closest('tr'), button));
@@ -107,16 +113,54 @@ async function save(row, button) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kind: row.dataset.kind, typeName: row.dataset.type, label, hint }),
     });
-    // The row goes, because it is no longer a gap. The screens read the same table, so the name is live on the next
-    // panel render — no restart, no deployment.
+    // Only this row goes, and nothing else is redrawn. Re-rendering the list here threw away every other field the
+    // reader had already filled in, which made naming more than one thing at a time impossible.
     row.remove();
-    await renderNaming();
+    countGaps();
+    return true;
   } catch (error) {
     button.disabled = false;
     button.textContent = 'Übernehmen';
     row.querySelector('.naming-input').setAttribute('title', String(error.message ?? error));
     row.classList.add('naming-failed');
+    return false;
   }
+}
+
+/** Keeps the counter honest without asking the server again. */
+function countGaps() {
+  const open = $('namingGaps').querySelectorAll('tr[data-kind]').length;
+  $('namingSummary').textContent = open
+    ? `${nf.format(open)} ohne Namen`
+    : 'alles benannt — die Liste ist leer, weil jeder Typ im Log ein Wort hat';
+}
+
+/**
+ * Saves every row that has a name in it.
+ *
+ * The list is a work queue, and somebody working through it types several names and then wants them all. Row by row is
+ * the exception, not the normal case.
+ */
+async function saveAll(button) {
+  const rows = [...$('namingGaps').querySelectorAll('tr[data-kind]')].filter(
+    (row) => row.querySelector('.naming-input').value.trim().length > 0
+  );
+  if (!rows.length) return;
+
+  button.disabled = true;
+  const label = button.textContent;
+  let saved = 0;
+  for (const row of rows) {
+    // Sequential on purpose: twenty parallel writes against one table gain nothing and turn one failure into an
+    // unclear partial state.
+    if (await save(row, row.querySelector('.naming-save'))) saved++;
+    button.textContent = `speichert … ${saved}/${rows.length}`;
+  }
+
+  button.disabled = false;
+  button.textContent = label;
+  // Now a full reload is right: what was saved has moved from one list to the other.
+  await renderNaming();
 }
 
 function renderOverrides(overrides) {

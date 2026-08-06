@@ -269,21 +269,33 @@ async function renderOverview() {
     ? 'Namen sichtbar (SHOW_ACTOR_IDENTITY=true)'
     : 'Pseudonyme — Namen über SHOW_ACTOR_IDENTITY=true';
 
-  $('decisions').innerHTML = table(decisions.slice(0, 25), [
-    { label: 'Worum', render: (r) => escape(r.worum_geht_es) },
-    { label: 'eingereicht von', render: (r) => escape(r.eingereicht_von) },
-    { label: 'entschieden von', render: (r) => escape(r.entschieden_von) },
-    { label: 'Entscheidung', render: (r) => escape(r.entscheidung) },
-    { label: 'wie oft', numeric: true, render: (r) => nf.format(r.wie_oft) },
-    { label: 'Wartezeit', numeric: true, render: (r) => `${nf.format(r.wartezeit_stunden ?? 0)} h` },
-  ]);
+  // The person who decided leads to what that person does. The row names two people, and the decider is the one the
+  // reader is asking about — the other is one click further, in the collaboration table below.
+  $('decisions').innerHTML = table(
+    decisions.slice(0, 25),
+    [
+      { label: 'Worum', render: (r) => escape(r.worum_geht_es) },
+      { label: 'eingereicht von', render: (r) => escape(r.eingereicht_von) },
+      { label: 'entschieden von', render: (r) => escape(r.entschieden_von) },
+      { label: 'Entscheidung', render: (r) => escape(r.entscheidung) },
+      { label: 'wie oft', numeric: true, render: (r) => nf.format(r.wie_oft) },
+      { label: 'Wartezeit', numeric: true, render: (r) => `${nf.format(r.wartezeit_stunden ?? 0)} h` },
+    ],
+    (row) => (row.entschieden_von_key ? { actor: row.entschieden_von_key } : null)
+  );
+  wireDrill('decisions');
 
-  $('collaboration').innerHTML = table(collaboration.slice(0, 20), [
-    { label: 'Worum', render: (r) => escape(r.worum_geht_es) },
-    { label: 'Person', render: (r) => escape(r.person) },
-    { label: 'zusammen mit', render: (r) => escape(r.zusammen_mit) },
-    { label: 'gemeinsame Fälle', numeric: true, render: (r) => nf.format(r.gemeinsame_faelle) },
-  ]);
+  $('collaboration').innerHTML = table(
+    collaboration.slice(0, 20),
+    [
+      { label: 'Worum', render: (r) => escape(r.worum_geht_es) },
+      { label: 'Person', render: (r) => escape(r.person) },
+      { label: 'zusammen mit', render: (r) => escape(r.zusammen_mit) },
+      { label: 'gemeinsame Fälle', numeric: true, render: (r) => nf.format(r.gemeinsame_faelle) },
+    ],
+    (row) => (row.person_key ? { actor: row.person_key } : null)
+  );
+  wireDrill('collaboration');
 
   $('processes').innerHTML = table(processes, [
     { label: 'Prozess', render: (r) => `<strong>${escape(r.prozess)}</strong>` },
