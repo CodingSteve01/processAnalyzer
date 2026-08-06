@@ -189,7 +189,7 @@ public sealed class AnalyticsSqlTests
                 (source_id, event_id, event_type, occurred_at, recorded_at, performer_type, performer_id,
                  source_application)
             VALUES ({sourceId}, gen_random_uuid(), 'demo.thing.happened.v1', now(), now(), '{actorKind}', 'u-9',
-                    'voffice')
+                    'erp')
             ON CONFLICT (source_id) DO NOTHING
             """
         );
@@ -198,7 +198,7 @@ public sealed class AnalyticsSqlTests
             INSERT INTO ocel.event
                 (id, source_id, type, ts, recorded_at, actor_key, actor_kind, source_application)
             VALUES ('e:test{sourceId}', {sourceId}, 'demo.thing.happened.v1', now(), now(), 'a:testmulti01',
-                    '{actorKind}', 'voffice')
+                    '{actorKind}', 'erp')
             ON CONFLICT (id) DO NOTHING
             """
         );
