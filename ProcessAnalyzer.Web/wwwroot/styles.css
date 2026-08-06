@@ -895,3 +895,59 @@ table.data tr.selected { background: var(--accent-dim); }
 .node-clickable:hover polygon,
 .node-clickable:hover ellipse { stroke-width: 2.5; }
 .node-clickable:hover text { font-weight: 700; }
+
+/* --- the landscape ---------------------------------------------------------------------------------------------- */
+
+/*
+ * Drawn by us, not by the miner: it has to be clickable, it has to redraw when the scope changes, and twenty nodes do
+ * not need a layout engine. It lives on the light surface every picture here uses, because it sits next to the mined
+ * ones and two different backgrounds side by side read as a mistake.
+ */
+.landscape { display: block; font-family: inherit; font-size: 12px; }
+
+.landscape .lsnode rect {
+  fill: #eef2ff;
+  stroke: #4f46e5;
+  stroke-width: 1.5;
+}
+
+.landscape .lsnode text { fill: #1f2328; }
+.landscape .lsnode { cursor: pointer; }
+.landscape .lsnode:hover rect { fill: #dbe3ff; stroke-width: 2.5; }
+
+.landscape .lsedge {
+  fill: none;
+  stroke: #6b7280;
+  opacity: 0.55;
+  marker-end: url(#lsarrow);
+}
+
+.landscape .lsedge:hover { stroke: #4f46e5; opacity: 1; }
+
+/* A pair whose order changes from case to case is not an arrow anybody should trust. */
+.landscape .lsedge.unclear { stroke-dasharray: 5 4; opacity: 0.4; }
+
+.landscape marker path { fill: #6b7280; }
+
+/* --- full screen for any picture --------------------------------------------------------------------------------- */
+
+/*
+ * Used when the browser refuses the fullscreen request. An internal tool has to work in a browser that says no, and
+ * "nothing happened when I clicked it" is the worst possible answer.
+ */
+.model-view-full {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  max-height: none;
+  height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
+.model-view:fullscreen {
+  max-height: none;
+  height: 100vh;
+  background: #fbfbfd;
+  padding: 16px;
+}

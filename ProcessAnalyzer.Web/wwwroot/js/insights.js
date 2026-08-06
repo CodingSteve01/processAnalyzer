@@ -10,6 +10,7 @@ import { renderNaming, initNaming } from './naming.js';
 import { renderDrill, initDrill, drillTo } from './drill.js';
 import { renderReport, initReport } from './report.js';
 import { whenOpened } from './views.js';
+import { attachViewer } from './imageview.js';
 
 const nf = new Intl.NumberFormat('de-DE');
 const pf = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 });
@@ -403,6 +404,12 @@ async function renderModels() {
     // every step instead of being resampled.
     $('modelView').innerHTML = `<img class="model-image" src="${url}" alt="Prozessdiagramm" />`;
     applyZoom();
+    // The shared viewer adds full screen and behaves exactly like the one inside the drill-down. The older buttons above
+    // stay for now; both drive the same picture.
+    if (!$('modelView').dataset.viewer) {
+      attachViewer($('modelView'), { title: 'Prozessdiagramm' });
+      $('modelView').dataset.viewer = 'ready';
+    }
   };
 
   const renderTabs = (key) => {
