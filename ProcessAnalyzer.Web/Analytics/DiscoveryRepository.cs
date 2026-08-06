@@ -359,6 +359,73 @@ public sealed class DiscoveryRepository
         );
 
     /// <summary>
+    /// The process landscape: which processes hand work to which, and how much.
+    /// </summary>
+    /// <remarks>
+    /// The mined pictures answer how one process runs, and the combined one is a wall of crossing edges. Neither answers
+    /// the question somebody asks first: what does this company do end to end. That answer is in the log and needs no
+    /// mining — an event that touches two kinds of object IS the handover between them, and there are thousands of them.
+    /// <para>
+    /// The direction comes from which of the two cases started earlier, decided per shared event and then by majority. A
+    /// tour created after the order it carries is downstream of it, however the two are wired in the database. Near ties
+    /// are reported rather than resolved by coin toss: <c>richtung_klarheit</c> says how one-sided the pair actually is.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> LandscapeAsync(Scope scope, CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            WITH shared AS (
+                SELECT ea.object_id   AS a_case,
+                       la.object_type AS a_type,
+                       la.first_ts    AS a_start,
+                       eb.object_id   AS b_case,
+                       lb.object_type AS b_type,
+                       lb.first_ts    AS b_start,
+                       ea.event_id
+                FROM ocel.e2o ea
+                JOIN ocel.e2o eb ON eb.event_id = ea.event_id AND eb.object_id <> ea.object_id
+                JOIN analytics.object_lifecycle la ON la.object_id = ea.object_id
+                JOIN analytics.object_lifecycle lb ON lb.object_id = eb.object_id
+                WHERE la.object_type <> lb.object_type
+                  AND (@periodFrom::timestamptz IS NULL OR la.first_ts >= @periodFrom)
+                  AND (@periodUntil::timestamptz IS NULL OR la.first_ts < @periodUntil)
+                  AND analytics.case_touched_by_group(ea.object_id, @scopeGroup)
+            ),
+            -- One row per unordered pair, so the same handover is not reported twice with the arrow reversed.
+            pair AS (
+                SELECT least(a_type, b_type)    AS links,
+                       greatest(a_type, b_type) AS rechts,
+                       count(DISTINCT event_id) AS ereignisse,
+                       count(DISTINCT a_case)   AS faelle,
+                       -- How often the left-hand process started first. A half means no direction at all.
+                       avg(
+                           CASE
+                               WHEN a_type = least(a_type, b_type) AND a_start <= b_start THEN 1.0
+                               WHEN a_type = greatest(a_type, b_type) AND b_start <= a_start THEN 1.0
+                               ELSE 0.0
+                           END
+                       ) AS links_zuerst
+                FROM shared
+                GROUP BY 1, 2
+            )
+            SELECT CASE WHEN links_zuerst >= 0.5 THEN links ELSE rechts END AS von_key,
+                   CASE WHEN links_zuerst >= 0.5 THEN rechts ELSE links END AS an_key,
+                   analytics.label_object(CASE WHEN links_zuerst >= 0.5 THEN links ELSE rechts END) AS von,
+                   analytics.label_object(CASE WHEN links_zuerst >= 0.5 THEN rechts ELSE links END) AS an,
+                   ereignisse,
+                   faelle,
+                   round(abs(links_zuerst - 0.5) * 2, 2) AS richtung_klarheit
+            FROM pair
+            WHERE faelle >= 3
+            ORDER BY ereignisse DESC
+            LIMIT 60
+            """,
+            ct,
+            scope.Parameters()
+        );
+
+    /// <summary>
     /// Event types that were registered in the source but never observed, and types observed but never labelled.
     /// </summary>
     /// <remarks>

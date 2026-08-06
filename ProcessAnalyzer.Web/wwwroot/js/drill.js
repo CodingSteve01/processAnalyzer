@@ -19,6 +19,8 @@ import { request } from './api.js';
 import { periodQuery, periodLabel, setPeriod } from './period.js';
 import { $, escape } from './utils.js';
 import { drawLineChart } from './linechart.js';
+import { attachViewer } from './imageview.js';
+import { renderLandscape } from './landscape.js';
 import * as readings from './readings.js';
 
 const nf = new Intl.NumberFormat('de-DE');
@@ -119,9 +121,23 @@ async function renderProcesses() {
   $('drillReading').textContent = rows.length ? readings.processes(rows) ?? '' : '';
   $('drillReading').hidden = !rows.length;
 
+  // The landscape first: before choosing a process, somebody wants to see what there is end to end. The cards below are
+  // the same list as a choice.
+  const landscape = rows.length
+    ? `<h3>Die Landschaft</h3>
+       <p class="caveat">
+         Wer gibt wem Arbeit. Eine Kante ist ein Ereignis, das zwei Arten von Objekt gleichzeitig berührt, die Dicke ist
+         die Menge, die Richtung kommt daraus, welcher Fall zuerst begonnen hat. Gestrichelt heisst: die Reihenfolge
+         wechselt von Fall zu Fall. Ein Klick auf einen Kasten öffnet den Ablauf.
+       </p>
+       <div class="model-view model-view-inline" id="drillLandscape"></div>
+       <div class="chart-readout" id="drillLandscapeReadout"></div>
+       <h3>Die Abläufe im Einzelnen</h3>`
+    : '';
+
   // Cards, not a table: at this level the reader is choosing, and a choice reads better as a handful of tiles than as
   // twenty rows of numbers with no shape.
-  $('drillBody').innerHTML = rows.length
+  $('drillBody').innerHTML = landscape + (rows.length
     ? `<div class="drill-cards">${rows
         .map(
           (row) => `
@@ -138,7 +154,16 @@ async function renderProcesses() {
         </button>`
         )
         .join('')}</div>`
-    : '<p class="empty">Noch keine Prozesse im Spiegel.</p>';
+    : '<p class="empty">Noch keine Prozesse im Spiegel.</p>');
+
+  if (rows.length) {
+    // The landscape is a picture like any other here, so it gets the same controls: zoom, reading size, full screen.
+    attachViewer($('drillLandscape'), { title: 'Prozesslandschaft' });
+    renderLandscape($('drillLandscape'), $('drillLandscapeReadout'), (key) => {
+      names.process = rows.find((row) => row.technischer_typ === key)?.prozess ?? key;
+      goTo({ process: key });
+    });
+  }
 
   for (const card of $('drillBody').querySelectorAll('.drill-card')) {
     card.addEventListener('click', () => {
@@ -583,6 +608,8 @@ async function showProcessDiagram(process, label) {
 
   host.innerHTML = `<div class="model-view model-view-inline" id="drillDiagramBox">${svg}</div>
     <p class="hint">Ein Klick auf einen Kasten führt zu den Fällen, die durch diesen Schritt gelaufen sind.</p>`;
+  // Same controls as everywhere else, including full screen: a mined graph is metres wide and this box is not.
+  attachViewer($('drillDiagramBox'), { title: `Ablauf ${label ?? process}` });
   wireDiagram(process);
 }
 

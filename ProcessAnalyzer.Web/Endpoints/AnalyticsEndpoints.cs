@@ -85,6 +85,12 @@ public static class AnalyticsEndpoints
             (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
                 repo.RoleHandoverMatrixAsync(Scope.FromQuery(from, until, group), t)
         );
+        // The landscape: what this company does end to end, from the events that touch two kinds of object at once.
+        group.MapGet(
+            "/discovery/landscape",
+            (DiscoveryRepository repo, string? from, string? until, string? group, CancellationToken t) =>
+                repo.LandscapeAsync(Scope.FromQuery(from, until, group), t)
+        );
         group.MapGet("/discovery/coverage", (DiscoveryRepository repo, CancellationToken t) => repo.CoverageAsync(t));
 
         group.MapPost(
