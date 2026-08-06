@@ -95,6 +95,43 @@ public sealed class AnalyticsSqlTests
     }
 
     [Fact]
+    public async Task ObjectLabel_UsesTheEntityNounForTheGenericTier()
+    {
+        // An entity that only ever appears through the generic tier has no 'object' label — nothing declares it as a
+        // business object. It was still counted on the screens that count objects, and read there as "⚠ <slug>" while
+        // the step it appeared in read as proper German.
+        await ExecuteAsync(
+            "INSERT INTO ocel.label (kind, type_name, label_de) VALUES ('entity', 'test-stamp', 'Zeitstempel') "
+                + "ON CONFLICT (kind, type_name) DO UPDATE SET label_de = EXCLUDED.label_de"
+        );
+
+        var label = await TextAsync("SELECT analytics.label_object('test-stamp')");
+
+        await ExecuteAsync("DELETE FROM ocel.label WHERE kind = 'entity' AND type_name = 'test-stamp'");
+
+        Assert.Equal("Zeitstempel", label);
+    }
+
+    [Fact]
+    public async Task ObjectLabel_StillMarksATypeNobodyHasNamed()
+    {
+        var label = await TextAsync("SELECT analytics.label_object('test-nothing-named-this')");
+
+        // The fallback must not swallow the marker: an unnamed type stays visible as one.
+        Assert.StartsWith("⚠", label);
+        Assert.Contains("test-nothing-named-this", label);
+    }
+
+    [Fact]
+    public async Task ObjectLabel_PrefersTheDeclaredObjectLabelOverTheEntityNoun()
+    {
+        // Plural on the screens that count, singular in the activity sentence. Where both exist the object label wins.
+        var label = await TextAsync("SELECT analytics.label_object('document')");
+
+        Assert.Equal("Belege", label);
+    }
+
+    [Fact]
     public async Task Identity_IsOffUnlessTheSettingSaysOtherwise()
     {
         await ExecuteAsync("UPDATE analytics.setting SET value = 'false' WHERE key = 'show_actor_identity'");
