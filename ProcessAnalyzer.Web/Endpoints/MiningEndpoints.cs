@@ -13,7 +13,32 @@ namespace ProcessAnalyzer.Web.Endpoints;
 /// </summary>
 public static class MiningEndpoints
 {
-    private static readonly string[] Models = ["ocdfg-frequency.svg", "ocdfg-performance.svg", "ocpn.svg"];
+    private static readonly string[] Overviews = ["ocdfg-frequency.svg", "ocdfg-performance.svg", "ocpn.svg"];
+
+    /// <summary>
+    /// What may be read out of the artifact directory. A pattern rather than a fixed list, because the miner writes
+    /// one set of diagrams per process and their names come from the data — but still a pattern and not a path, since
+    /// the directory is shared with another container and a path fragment would turn this into a file-read primitive.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex ProcessModel = new(
+        @"^process-[a-z0-9-]{1,60}-(frequency|performance|main)\.svg$",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+    );
+
+    private static bool IsModel(string name) =>
+        Overviews.Contains(name, StringComparer.Ordinal) || ProcessModel.IsMatch(name);
+
+    private static IEnumerable<string> KnownModels(string directory)
+    {
+        var found = Directory
+            .EnumerateFiles(directory, "process-*.svg")
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(name => ProcessModel.IsMatch(name))
+            .OrderBy(name => name, StringComparer.Ordinal);
+
+        return Overviews.Concat(found);
+    }
 
     public static WebApplication MapMiningEndpoints(this WebApplication app)
     {
@@ -22,7 +47,7 @@ public static class MiningEndpoints
             (IWebHostEnvironment _) =>
             {
                 var directory = ArtifactPath.Directory;
-                var models = Models
+                var models = KnownModels(directory)
                     .Select(name => new FileInfo(Path.Combine(directory, name)))
                     .Select(file => new
                     {
@@ -61,9 +86,7 @@ public static class MiningEndpoints
             "/api/mining/model/{name}",
             (string name) =>
             {
-                // Only the known file names. The artifact directory is shared with another container, and letting a
-                // path fragment through would turn that into a file-read primitive.
-                if (!Models.Contains(name, StringComparer.Ordinal))
+                if (!IsModel(name))
                     return Results.NotFound();
 
                 var path = Path.Combine(ArtifactPath.Directory, name);

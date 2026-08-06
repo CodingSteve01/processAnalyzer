@@ -2,7 +2,7 @@
 // aggregated across types: an event that touches five objects would count five times.
 
 import { request } from './api.js';
-import { periodQuery, periodLabel, initPeriod } from './period.js';
+import { periodQuery, periodLabel, initPeriod, scopeQuery } from './period.js';
 import { $, escape } from './utils.js';
 import * as readings from './readings.js';
 import { renderCases, renderTrend, initCases } from './cases.js';
@@ -17,6 +17,23 @@ function hours(seconds) {
   if (seconds === null || seconds === undefined) return '—';
   const value = Number(seconds) / 3600;
   return value >= 10 ? `${nf.format(Math.round(value))} h` : `${value.toFixed(1)} h`;
+}
+
+/**
+ * A share, or "—" when there was nothing to divide by.
+ *
+ * A process without a single closed case has no automation rate, and printing "0 %" for it claims a measurement
+ * nobody made — the reader cannot tell it apart from a process that really runs entirely by hand.
+ */
+function share(value) {
+  if (value === null || value === undefined) return '—';
+  return pf.format(Number(value));
+}
+
+/** A count or average, or "—" when absent. Same reason as {@link share}. */
+function amount(value, digits = 1) {
+  if (value === null || value === undefined) return '—';
+  return Number(value).toFixed(digits);
 }
 
 // Labels come from the database (ocel.label), where they can be corrected without a deployment. The frontend
@@ -80,8 +97,8 @@ async function renderThroughput() {
   $('tP50').textContent = hours(row.p50_seconds);
   $('tP80').textContent = hours(row.p80_seconds);
   $('tP95').textContent = hours(row.p95_seconds);
-  $('tSteps').textContent = Number(row.avg_steps ?? 0).toFixed(1);
-  $('tOutside').textContent = pf.format(Number(row.outside_hours_share ?? 0));
+  $('tSteps').textContent = amount(row.avg_steps);
+  $('tOutside').textContent = share(row.outside_hours_share);
   reading('rThroughput', readings.throughput(row));
 }
 
@@ -143,8 +160,8 @@ async function renderAutomation() {
   const [[summary], candidates] = await Promise.all([scoped('automation'), scoped('automation-candidates')]);
   reading('rAutomation', readings.automation(summary, candidates));
   if (summary) {
-    $('aStp').textContent = pf.format(Number(summary.straight_through_share ?? 0));
-    $('aManual').textContent = pf.format(Number(summary.manual_event_share ?? 0));
+    $('aStp').textContent = share(summary.straight_through_share);
+    $('aManual').textContent = share(summary.manual_event_share);
   }
 
   $('candidates').innerHTML = table(candidates.slice(0, 10), [
@@ -181,15 +198,15 @@ async function renderEndpointsAndHandovers() {
 /** The discovery screens: what exists, who does it, what crosses the company boundary. No object type needed. */
 async function renderOverview() {
   const responses = await Promise.all([
-    request('/api/discovery/processes'),
-    request('/api/discovery/roles'),
-    request('/api/discovery/who-does-what'),
-    request('/api/discovery/handovers'),
-    request('/api/discovery/role-handovers'),
+    request(`/api/discovery/processes${scopeQuery()}`),
+    request(`/api/discovery/roles${scopeQuery()}`),
+    request(`/api/discovery/who-does-what${scopeQuery()}`),
+    request(`/api/discovery/handovers${scopeQuery()}`),
+    request(`/api/discovery/role-handovers${scopeQuery()}`),
     request('/api/discovery/coverage'),
     request('/api/discovery/calendar'),
-    request('/api/discovery/decisions'),
-    request('/api/discovery/collaboration'),
+    request(`/api/discovery/decisions${scopeQuery()}`),
+    request(`/api/discovery/collaboration${scopeQuery()}`),
   ]);
 
   // A cancelled request resolves to null. Painting that as an empty table would tell the reader there is no data
@@ -287,16 +304,19 @@ async function renderOverview() {
   ]);
 }
 
-/** The mined diagrams. Their age is shown, because a stale picture that looks current is worse than none. */
+/**
+ * The mined diagrams: one process at a time, or all of them together.
+ *
+ * The combined graph answers one question — where do processes meet — and answers nothing else, because twenty object
+ * types in one picture is a wall of crossing edges. So the process comes first here and the rendering second: pick
+ * what you want to look at, then how.
+ *
+ * Their age is shown, because a stale picture that looks current is worse than none.
+ */
 async function renderModels() {
   const status = await request('/api/mining/status');
   const available = status.models.filter((m) => m.available);
-
-  const names = {
-    'ocdfg-frequency.svg': 'Ablauf nach Häufigkeit',
-    'ocdfg-performance.svg': 'Ablauf nach Dauer',
-    'ocpn.svg': 'Modell (Petri-Netz)',
-  };
+  const byName = new Map(available.map((model) => [model.name, model.url]));
 
   if (!available.length) {
     $('miningHint').textContent = `noch nicht gerechnet — ${status.hint}`;
@@ -307,32 +327,164 @@ async function renderModels() {
   const age = Math.max(...available.map((m) => m.ageMinutes ?? 0));
   $('miningHint').textContent = age > 90 ? `gerechnet vor ${Math.round(age / 60)} h` : `gerechnet vor ${age} min`;
 
-  $('modelTabs').innerHTML = available
-    .map(
-      (model, index) =>
-        `<button type="button" class="model-tab${index === 0 ? ' active' : ''}" data-url="${model.url}">` +
-        `${escape(names[model.name] ?? model.name)}</button>`
-    )
-    .join('');
+  // The overview always exists; the per-process sets come from the miner's own report, so a process that was added
+  // to the source appears here as soon as the next mining run has seen it.
+  const perProcess = (status.stats?.processes ?? []).filter((p) => p.files && byName.has(p.files.frequency));
+  const views = {
+    all: [
+      { label: 'Alle Prozesse: Häufigkeit', name: 'ocdfg-frequency.svg' },
+      { label: 'Alle Prozesse: Dauer', name: 'ocdfg-performance.svg' },
+      { label: 'Modell (Petri-Netz)', name: 'ocpn.svg' },
+    ],
+  };
+  for (const process of perProcess) {
+    views[process.slug] = [
+      { label: 'Hauptpfade', name: process.files.main },
+      { label: 'Alle Pfade', name: process.files.frequency },
+      { label: 'Nach Dauer', name: process.files.performance },
+    ];
+  }
+
+  const select = $('modelProcess');
+  select.innerHTML =
+    '<option value="all">Alle Prozesse (wo sie sich treffen)</option>' +
+    perProcess.map((p) => `<option value="${escape(p.slug)}">${escape(p.object_type)}</option>`).join('');
 
   const show = (url) => {
-    // An <object> rather than <img>: graphviz output is wide, and this keeps it scrollable and selectable.
-    $('modelView').innerHTML = `<object type="image/svg+xml" data="${url}" aria-label="Prozessdiagramm"></object>`;
+    // An <img> and not an <object>: the picture has to be scaled from the outside, and a nested browsing context
+    // decides its own size. Width in percent lets the SVG's own viewBox do the scaling, so the text stays sharp at
+    // every step instead of being resampled.
+    $('modelView').innerHTML = `<img class="model-image" src="${url}" alt="Prozessdiagramm" />`;
+    applyZoom();
   };
 
-  $('modelTabs')
-    .querySelectorAll('.model-tab')
-    .forEach((tab) =>
-      tab.addEventListener('click', () => {
-        $('modelTabs')
-          .querySelectorAll('.model-tab')
-          .forEach((other) => other.classList.remove('active'));
-        tab.classList.add('active');
-        show(tab.dataset.url);
-      })
-    );
+  const renderTabs = (key) => {
+    const options = (views[key] ?? []).filter((view) => byName.has(view.name));
+    if (!options.length) {
+      $('modelTabs').innerHTML = '';
+      $('modelView').innerHTML = '<p class="empty">Für diesen Prozess wurde kein Diagramm gerechnet.</p>';
+      return;
+    }
 
-  show(available[0].url);
+    $('modelTabs').innerHTML = options
+      .map(
+        (view, index) =>
+          `<button type="button" class="model-tab${index === 0 ? ' active' : ''}" ` +
+          `data-url="${byName.get(view.name)}">${escape(view.label)}</button>`
+      )
+      .join('');
+
+    $('modelTabs')
+      .querySelectorAll('.model-tab')
+      .forEach((tab) =>
+        tab.addEventListener('click', () => {
+          $('modelTabs')
+            .querySelectorAll('.model-tab')
+            .forEach((other) => other.classList.remove('active'));
+          tab.classList.add('active');
+          show(tab.dataset.url);
+        })
+      );
+
+    show(byName.get(options[0].name));
+  };
+
+  select.onchange = () => renderTabs(select.value);
+  // Straight into the first real process rather than the combined wall — that picture is a comparison, and a
+  // comparison is not where somebody starts.
+  select.value = perProcess.length ? perProcess[0].slug : 'all';
+  renderTabs(select.value);
+}
+
+// ===== the diagram viewer =====
+//
+// Fitted to the width on arrival: a mined graph is a few thousand points wide, and at its own size the reader gets
+// the top left corner of a canvas with no way to tell where they are. Zoom is a factor ON the fitted width, so 100 %
+// always means "whole diagram" and every step keeps the aspect ratio.
+
+const ZoomSteps = [1, 1.5, 2, 3, 4, 6, 8];
+
+/** 1 = fitted to the width. "Lesegröße" leaves the ladder and shows the SVG at its own size. */
+let zoom = 1;
+let naturalSize = false;
+
+function applyZoom() {
+  const image = document.querySelector('#modelView .model-image');
+  if (!image) return;
+
+  if (naturalSize) {
+    image.style.width = 'auto';
+    image.style.maxWidth = 'none';
+    $('zoomLevel').textContent = 'Lesegröße';
+    return;
+  }
+
+  image.style.maxWidth = 'none';
+  image.style.width = `${zoom * 100}%`;
+  $('zoomLevel').textContent = `${Math.round(zoom * 100)} %`;
+}
+
+function stepZoom(direction) {
+  // Coming back from natural size lands on the nearest ladder rung rather than jumping to the fitted view, so the
+  // step the reader asked for is the step they get.
+  if (naturalSize) {
+    naturalSize = false;
+    zoom = ZoomSteps[ZoomSteps.length - 1];
+  }
+
+  const index = ZoomSteps.indexOf(zoom);
+  const next = index < 0 ? 0 : Math.min(Math.max(index + direction, 0), ZoomSteps.length - 1);
+  zoom = ZoomSteps[next];
+  applyZoom();
+}
+
+function initModelViewer() {
+  const view = $('modelView');
+
+  $('zoomFit').addEventListener('click', () => {
+    naturalSize = false;
+    zoom = 1;
+    applyZoom();
+    view.scrollTo({ left: 0, top: 0 });
+  });
+  $('zoomIn').addEventListener('click', () => stepZoom(1));
+  $('zoomOut').addEventListener('click', () => stepZoom(-1));
+  $('zoomFull').addEventListener('click', () => {
+    naturalSize = true;
+    applyZoom();
+  });
+
+  // Ctrl + wheel, not plain wheel: the page itself scrolls with the wheel, and a diagram that swallows that gesture
+  // traps the reader inside the box.
+  view.addEventListener(
+    'wheel',
+    (event) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      stepZoom(event.deltaY < 0 ? 1 : -1);
+    },
+    { passive: false }
+  );
+
+  // Drag to pan. Scrollbars alone work, but on a graph this wide nobody finds the place they were looking at again.
+  let dragging = null;
+  view.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    dragging = { x: event.clientX, y: event.clientY, left: view.scrollLeft, top: view.scrollTop };
+    view.setPointerCapture(event.pointerId);
+    view.classList.add('dragging');
+  });
+  view.addEventListener('pointermove', (event) => {
+    if (!dragging) return;
+    view.scrollLeft = dragging.left - (event.clientX - dragging.x);
+    view.scrollTop = dragging.top - (event.clientY - dragging.y);
+  });
+  const endDrag = () => {
+    dragging = null;
+    view.classList.remove('dragging');
+  };
+  view.addEventListener('pointerup', endDrag);
+  view.addEventListener('pointercancel', endDrag);
 }
 
 export async function renderInsights() {
@@ -369,6 +521,8 @@ export function initInsights() {
 
   // The case search re-queries only the case list; re-rendering every panel for a keystroke would make typing lag.
   initCases(() => renderCases($('objectTypeSelect').value));
+
+  initModelViewer();
 
   $('objectTypeSelect').addEventListener('change', (event) => {
     objectType = event.target.value;

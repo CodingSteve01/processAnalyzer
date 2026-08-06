@@ -13,9 +13,6 @@
     <span class="brand"><span class="brand-accent">Process</span>Analyzer</span>
     <span class="topbar-sub">Was im Unternehmen tatsächlich passiert</span>
     <span class="spacer"></span>
-    <!-- One period for the whole application. A filter honoured by some panels and ignored by others is worse than
-         none: two numbers on one screen would answer different questions. -->
-    <span class="periodbar" id="periodBar"></span>
     <span class="status-pill loading" id="healthPill">Lade …</span>
     <button class="btn-icon" id="refreshBtn" type="button" title="Jetzt aktualisieren" aria-label="Jetzt aktualisieren">↻</button>
   </header>
@@ -54,6 +51,19 @@
       <span class="viewtab-sub">Woher die Zahlen kommen</span>
     </button>
   </nav>
+
+  <!--
+    What every question on every page is asked about. Its own row rather than a corner of the topbar: three controls
+    squeezed next to the brand were clipped at the window edge, and a filter you cannot see is a filter nobody
+    applies. Honoured by all panels — a window some honour and others ignore is worse than none, because the reader
+    compares two numbers on one screen that answer different questions.
+  -->
+  <div class="scopebar" aria-label="Auswertungsumfang">
+    <span class="scopebar-label">Auswertung</span>
+    <span class="periodbar" id="periodBar"></span>
+    <span class="spacer"></span>
+    <span class="hint" id="scopeSummary"></span>
+  </div>
 
   <main class="main">
     <!-- Shown when the source is not configured or the last run failed. Hidden otherwise. -->
@@ -249,7 +259,26 @@
         Aus denselben Ereignissen gerechnet, mit pm4py. Eine Farbe pro Prozess: wo sich Farben in einem Kasten
         treffen, arbeiten mehrere Abläufe am selben Schritt.
       </p>
+      <!-- Process first, rendering second. The combined picture answers "where do processes meet" and nothing else;
+           with twenty object types in it, nobody can read how one process runs. -->
+      <div class="model-toolbar">
+        <label class="scope">
+          Prozess
+          <select id="modelProcess"></select>
+        </label>
+      </div>
       <div class="model-tabs" id="modelTabs"></div>
+      <!-- A mined graph is metres wide. Shown at its own size it is the top left corner of a canvas nobody can
+           navigate, so it arrives fitted to the width and is zoomed deliberately from there. -->
+      <div class="model-toolbar">
+        <button type="button" class="model-zoom" id="zoomFit" title="Ganzes Diagramm zeigen">Einpassen</button>
+        <button type="button" class="model-zoom" id="zoomOut" title="Kleiner" aria-label="Kleiner">−</button>
+        <span class="model-zoom-level" id="zoomLevel">100 %</span>
+        <button type="button" class="model-zoom" id="zoomIn" title="Größer" aria-label="Größer">+</button>
+        <button type="button" class="model-zoom" id="zoomFull" title="Schrift in Lesegröße">Lesegröße</button>
+        <span class="spacer"></span>
+        <span class="hint">Ziehen verschiebt das Bild, Strg + Mausrad zoomt.</span>
+      </div>
       <div class="model-view" id="modelView"></div>
     </section>
 
