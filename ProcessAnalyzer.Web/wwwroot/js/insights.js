@@ -5,10 +5,10 @@ import { request } from './api.js';
 import { periodQuery, periodLabel, initPeriod, scopeQuery } from './period.js';
 import { $, escape } from './utils.js';
 import * as readings from './readings.js';
-import { renderCases, renderTrend, initCases } from './cases.js';
 import { renderNaming, initNaming } from './naming.js';
 import { renderDrill, initDrill, drillTo } from './drill.js';
 import { renderReport, initReport } from './report.js';
+import { renderNow } from './now.js';
 import { whenOpened } from './views.js';
 import { attachViewer } from './imageview.js';
 
@@ -474,8 +474,6 @@ export async function renderInsights() {
   // needed thirteen seconds once left the entire page blank with nothing on screen to explain it.
   const panels = await Promise.allSettled([
     renderModels(),
-    renderTrend(objectType),
-    renderCases(objectType),
     renderThroughput(),
     renderTransitions(),
     renderRework(),
@@ -493,13 +491,12 @@ export function initInsights() {
   // comparing a filtered number with an unfiltered one.
   initPeriod($('periodBar'), () => renderInsights());
 
-  // The case search re-queries only the case list; re-rendering every panel for a keystroke would make typing lag.
-  initCases(() => renderCases($('objectTypeSelect').value));
-
   initNaming();
   initDrill();
   initReport();
   whenOpened('bericht', () => renderReport());
+  // Built when opened: three queries that nobody is waiting for while they work in the path.
+  whenOpened('jetzt', () => renderNow());
 
   $('objectTypeSelect').addEventListener('change', (event) => {
     objectType = event.target.value;

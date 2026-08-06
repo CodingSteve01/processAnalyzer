@@ -29,6 +29,10 @@
       <span class="viewtab-title">Prozesse</span>
       <span class="viewtab-sub">Vom Ablauf zum einzelnen Fall</span>
     </button>
+    <button type="button" class="viewtab" data-view="jetzt">
+      <span class="viewtab-title">Jetzt</span>
+      <span class="viewtab-sub">Was liegt, was schiefging</span>
+    </button>
     <button type="button" class="viewtab active" data-view="ueberblick">
       <span class="viewtab-title">Überblick</span>
       <span class="viewtab-sub">Abläufe, Übergaben, Abdeckung</span>
@@ -40,14 +44,6 @@
     <button type="button" class="viewtab" data-view="analyse">
       <span class="viewtab-title">Prozessanalyse</span>
       <span class="viewtab-sub">Kennzahlen je Ablauf</span>
-    </button>
-    <button type="button" class="viewtab" data-view="entwicklung">
-      <span class="viewtab-title">Entwicklung</span>
-      <span class="viewtab-sub">Verlauf über Wochen</span>
-    </button>
-    <button type="button" class="viewtab" data-view="faelle">
-      <span class="viewtab-title">Einzelfälle</span>
-      <span class="viewtab-sub">Einzelne Fälle nachlesen</span>
     </button>
     <button type="button" class="viewtab" data-view="diagramm">
       <span class="viewtab-title">Diagramme</span>
@@ -97,6 +93,40 @@
       </div>
       <p class="reading" id="drillReading" hidden></p>
       <div id="drillBody"></div>
+    </section>
+
+    <!-- ========================= Jetzt =========================
+      Der einzige Bildschirm, der auf die Gegenwart schaut. Alles andere hier ist Rückblick: nützlich im Workshop,
+      nutzlos um zehn Uhr morgens.
+    -->
+    <section class="panel view" data-view="jetzt" hidden aria-label="Jetzt">
+      <div class="panel-head">
+        <h2>Was jetzt liegt</h2>
+        <span class="spacer"></span>
+        <span class="hint" id="nowScope"></span>
+      </div>
+
+      <h3>Warteschlangen</h3>
+      <p class="caveat">
+        Offene Fälle, nach dem Schritt gruppiert, an dem sie stehen. Das Alter zählt gegen das jüngste Ereignis im
+        Spiegel, nicht gegen die Uhr.
+      </p>
+      <p class="reading" id="rQueue" hidden></p>
+      <div id="nowQueue"></div>
+
+      <h3>Zeitlich auffällige Fälle</h3>
+      <p class="caveat">
+        Nicht „langsamer als der Schnitt", sondern anders: je Übergang das Mittel und die Streuung über alle Fälle, und
+        hier stehen die jenseits von drei Standardabweichungen.
+      </p>
+      <div id="nowAnomalies"></div>
+
+      <h3>Vier Augen</h3>
+      <p class="caveat">
+        Fälle, in denen dieselbe Person begonnen und freigegeben hat. Kein Vorwurf, aber eine Liste, die jemand gesehen
+        haben muss, und sie lässt sich nicht aus Einstellungen ableiten, nur aus dem Log.
+      </p>
+      <div id="nowFourEyes"></div>
     </section>
 
     <!-- ========================= Überblick ========================= -->
@@ -238,44 +268,6 @@
 
       <h3>Übergaben in diesem Prozess</h3>
       <div id="handovers"></div>
-    </section>
-
-    <!-- ========================= Entwicklung ========================= -->
-    <section class="panel view" data-view="entwicklung" hidden aria-label="Entwicklung">
-      <div class="panel-head">
-        <h2>Entwicklung über die Wochen</h2>
-        <span class="spacer"></span>
-        <span class="hint">Prozess oben unter „Prozessanalyse" wählen</span>
-      </div>
-      <p class="caveat">
-        Nur abgeschlossene Fälle, nach Startwoche. Laufende zählen nicht mit — eine Woche, die noch läuft, sähe sonst
-        gut aus, weil ihre langsamen Fälle noch nicht fertig sind.
-      </p>
-      <p class="reading" id="rTrend" hidden></p>
-      <div class="chart-box"><svg id="trendChart" preserveAspectRatio="none"></svg></div>
-      <div class="legend" id="trendLegend"></div>
-      <div id="trendTable"></div>
-    </section>
-
-    <!-- ========================= Einzelfälle ========================= -->
-    <section class="panel view" data-view="faelle" hidden aria-label="Einzelfälle">
-      <div class="panel-head">
-        <h2>Einzelfälle</h2>
-        <label class="scope">
-          Nummer
-          <input class="login-input case-search" id="caseSearch" type="search" placeholder="z. B. 481203" />
-        </label>
-        <span class="spacer"></span>
-        <span class="hint" id="caseHint"></span>
-      </div>
-      <p class="caveat">
-        Die Aggregate sagen, dass 76 Belege im Ablage-Schritt stehen bleiben. Hier siehst du einen davon — ohne das
-        bleibt jede Auswertung eine Behauptung, die man glauben oder verwerfen muss.
-      </p>
-      <div class="case-layout">
-        <div id="caseList"></div>
-        <div id="caseTimeline"></div>
-      </div>
     </section>
 
     <!-- ========================= Diagramme ========================= -->
