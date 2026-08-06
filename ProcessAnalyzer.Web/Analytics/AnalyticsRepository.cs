@@ -289,6 +289,53 @@ public sealed class AnalyticsRepository
             [("objectType", objectType), .. scope.Parameters()]
         );
 
+    /// <summary>How this person is named on screen, through the same function every other panel uses.</summary>
+    public async Task<string> ActorNameAsync(string actorKey, CancellationToken ct)
+    {
+        var rows = await QueryAsync(
+            "SELECT analytics.person_with_role(@actorKey) AS name",
+            ct,
+            [("actorKey", actorKey)]
+        );
+        return rows.FirstOrDefault()?["name"] as string ?? actorKey;
+    }
+
+    /// <summary>
+    /// What one person actually does: their steps, by process, with how often and in how many cases.
+    /// </summary>
+    /// <remarks>
+    /// The people screens answered "who works with whom" and "which role does which step" and stopped there. The
+    /// question after that is always the same and had no screen: what does this person do all day. It reads at the level
+    /// of the step, not of the keystroke — this is a process tool, not a stopwatch on a person.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> ActorProfileAsync(
+        string actorKey,
+        Scope scope,
+        CancellationToken ct
+    ) =>
+        QueryAsync(
+            """
+            SELECT analytics.label_object(t.object_type)  AS prozess,
+                   t.object_type                          AS prozess_key,
+                   analytics.label_activity(t.event_type) AS schritt,
+                   t.event_type                           AS schritt_key,
+                   count(*)                               AS wie_oft,
+                   count(DISTINCT t.object_id)            AS faelle,
+                   min(t.ts)                              AS erstmals,
+                   max(t.ts)                              AS zuletzt
+            FROM analytics.object_timeline t
+            WHERE t.actor_key = @actorKey
+              AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
+              AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
+              AND analytics.case_touched_by_group(t.object_id, @scopeGroup)
+            GROUP BY 1, 2, 3, 4
+            ORDER BY count(*) DESC
+            LIMIT 60
+            """,
+            ct,
+            [("actorKey", actorKey), .. scope.Parameters()]
+        );
+
     /// <summary>
     /// One step over time: how often it happened per day, in how many cases, and how much of it was done by hand.
     /// </summary>

@@ -153,6 +153,10 @@ public sealed class DiscoveryRepository
             SELECT analytics.label_object(object_type)              AS worum_geht_es,
                    analytics.person_with_role(eingereicht_von)      AS eingereicht_von,
                    analytics.person_with_role(entschieden_von)      AS entschieden_von,
+                   -- The keys travel with the row: a person on screen has to lead somewhere, and a display name cannot
+                   -- be sent back as a filter.
+                   eingereicht_von                                  AS eingereicht_von_key,
+                   entschieden_von                                  AS entschieden_von_key,
                    analytics.label_activity(event_type)         AS entscheidung,
                    wie_oft,
                    round((wartezeit / 3600)::numeric, 1)        AS wartezeit_stunden
@@ -200,6 +204,8 @@ public sealed class DiscoveryRepository
             SELECT analytics.label_object(object_type)     AS worum_geht_es,
                    analytics.person_with_role(links)       AS person,
                    analytics.person_with_role(rechts)      AS zusammen_mit,
+                   links                                   AS person_key,
+                   rechts                                  AS zusammen_mit_key,
                    gemeinsame_faelle
             FROM pairs
             ORDER BY gemeinsame_faelle DESC
