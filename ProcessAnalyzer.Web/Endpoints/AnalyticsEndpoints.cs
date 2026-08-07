@@ -259,23 +259,6 @@ public static class AnalyticsEndpoints
             async (DirectorySync directory, CancellationToken token) => Results.Ok(await directory.SyncAsync(token))
         );
 
-        group.MapPost(
-            "/saved-views/sync",
-            async (SavedViewSync views, CancellationToken token) => Results.Ok(await views.SyncAsync(token))
-        );
-
-        // Who somebody IS, as opposed to what they did. Many people work in the same module and do completely different
-        // things with it, so a figure grouped by module is an average over unrelated roles. These three read the views
-        // people set up for themselves, which is the only place that distinction is already written down.
-        group.MapGet("/roles/profiles", (RoleRepository repo, CancellationToken t) => repo.ProfilesAsync(t));
-        group.MapGet("/roles/vocabulary", (RoleRepository repo, CancellationToken t) => repo.VocabularyAsync(t));
-        group.MapGet("/roles/screens", (RoleRepository repo, CancellationToken t) => repo.ScreensAsync(t));
-
-        // Which column layouts exist per screen and who shares one — the question a user-interface rebuild has to
-        // answer before anybody draws a screen.
-        group.MapGet("/roles/layouts", (RoleRepository repo, CancellationToken t) => repo.LayoutsAsync(t));
-        group.MapGet("/roles/layout-sharing", (RoleRepository repo, CancellationToken t) => repo.LayoutSharingAsync(t));
-
         // The single case. Scoped like everything else, because a case belongs to exactly one process.
         group.MapGet(
             "/cases",

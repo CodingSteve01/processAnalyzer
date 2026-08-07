@@ -71,17 +71,7 @@ INSERT INTO @tables (name) VALUES
     -- the directory: who exists and which group they act in, so the analysis speaks in roles rather than pseudonyms
     ('dbo.AspNetUsers'), ('dbo.UserGroups'), ('dbo.UserGroupMembers'),
     -- the business calendar, which decides what "two hours" means in every duration the product reports
-    ('dbo.HolidayCalendarEntries'), ('dbo.WorktimeCalendarEntries'),
-    -- the views people saved for themselves: the only place that says who somebody IS rather than what they did.
-    -- Many people use the same module for completely different work, and a department is not a role — the columns and
-    -- filters somebody configured are what tells them apart.
-    --
-    -- NOTE on what is read: the Data column of this table also holds the filter VALUES a person typed, which can be
-    -- customer names or licence plates. SavedViewSync drops them on read and stores property NAMES only, because the
-    -- name answers the role question and the value would import customer data for no analytical gain. The grant is
-    -- wider than the use on purpose — SQL Server cannot grant half a column — so the restraint lives in the reader and
-    -- is asserted by a test.
-    ('dbo.ApplicationViews');
+    ('dbo.HolidayCalendarEntries'), ('dbo.WorktimeCalendarEntries');
 
 DECLARE @name sysname, @sql nvarchar(400), @missing nvarchar(2000) = N'';
 DECLARE cur CURSOR LOCAL FAST_FORWARD FOR SELECT name FROM @tables;

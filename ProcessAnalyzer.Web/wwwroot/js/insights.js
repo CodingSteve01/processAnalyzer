@@ -18,7 +18,6 @@ import { renderDrill, initDrill, drillTo } from './drill.js';
 import { renderReport, initReport } from './report.js';
 import { renderNow } from './now.js';
 import { renderActors } from './actors.js';
-import { renderRoleSignals } from './roles.js';
 import { whenOpened } from './views.js';
 
 const nf = new Intl.NumberFormat('de-DE');
@@ -161,8 +160,6 @@ async function renderPeople() {
   // Loaded alongside: they belong to this screen, and the actor list is the only panel here that can be edited.
   renderActors();
   renderReleases();
-  // Unscoped and therefore loaded separately: a role is state, not something that happened in the chosen window.
-  renderRoleSignals();
 
   $('roleHandovers').innerHTML = table(roleHandovers, [
     { label: 'von', render: (r) => escape(r.von) },
@@ -302,19 +299,6 @@ export function initInsights() {
       ? result.skipped
       : `${nf.format(result.users)} Personen, ${nf.format(result.memberships)} Gruppenzuordnungen`;
     renderInsights();
-  });
-
-  $('savedViewsBtn').addEventListener('click', async () => {
-    $('savedViewsHint').textContent = 'läuft …';
-    const result = await request('/api/saved-views/sync', { method: 'POST' });
-    // The filter count is the number worth reporting: it is what the role catalogue is built from, and a pull that
-    // brought views but no filters means the payload shape changed.
-    $('savedViewsHint').textContent = result.skipped
-      ? result.skipped
-      : `${nf.format(result.views)} Ansichten, ${nf.format(result.filters)} Filtermerkmale, ${nf.format(
-          result.columns
-        )} Spalten`;
-    renderRoleSignals();
   });
 
   $('projectBtn').addEventListener('click', async () => {
