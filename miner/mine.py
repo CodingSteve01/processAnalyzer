@@ -121,6 +121,20 @@ def discover_per_process(ocel, minable, stats):
             if rule_result:
                 stats.setdefault("rules", []).append(rule_result)
 
+            # The pictures that answer WHEN and HOW EVENLY, rather than what the model looks like. Cheap, and each one
+            # answers a question none of the models can: when is the work done, does it queue in order, is one median
+            # hiding two populations.
+            for name, file in rhythm(frame, slug, object_type, stats).items():
+                files[name] = file
+
+            people_result = people(frame, slug, object_type, stats)
+            if people_result:
+                stats.setdefault("people", []).append(people_result)
+
+            segment_result = segments(frame, object_type)
+            if segment_result:
+                stats.setdefault("segments", []).append(segment_result)
+
             batch_result = batches(frame, object_type, stats)
             if batch_result:
                 stats.setdefault("batches", []).append(batch_result)
@@ -226,6 +240,163 @@ def flow(frame, slug, object_type, stats):
         stats.setdefault("flow_errors", []).append({"object_type": object_type, "error": str(error)})
 
     return files
+
+
+def rhythm(frame, slug, object_type, stats):
+    """
+    When the work happens, and how evenly.
+
+    Four pictures, none of them a model:
+
+      dotted    one dot per event, x = time, y = case, colour = step. The exploratory picture: batches, night runs,
+                backlogs and campaigns are visible in it before any statistic names them.
+      spectrum  every case as a line across the main path. Shows overtaking and FIFO violations — a case that entered
+                first and left last — which no average can show and which is what a queue actually feels like.
+      duration  the distribution of case durations, not three percentiles of it. Two populations hiding in one median
+                are the normal case in this company: a same-day document and one that waits for a weekly run.
+      hours     which hour of the day the work falls into. The weekly trend says how much, this says when.
+    """
+    files = {}
+    # The duration curve is a kernel density estimate. Cases that all took the same time have no distribution to
+    # estimate, and the failure arrives as "the data appears to lie in a lower-dimensional subspace" — true, and useless
+    # to a reader. Counted here instead, and skipped honestly.
+    spread = frame.groupby("case:concept:name")["time:timestamp"].agg(lambda ts: ts.max() - ts.min()).nunique()
+
+    pictures = [
+        ("dotted", pm4py.save_vis_dotted_chart, None),
+        ("hours", pm4py.save_vis_events_distribution_graph, "hours"),
+    ]
+    if spread >= 5:
+        pictures.insert(1, ("duration", pm4py.save_vis_case_duration_graph, None))
+    else:
+        stats.setdefault("rhythm_skipped", []).append(
+            {"object_type": object_type, "picture": "duration", "reason": "zu wenig verschiedene Durchlaufzeiten"}
+        )
+
+    for name, draw, argument in pictures:
+        try:
+            file = f"{name}-{slug}.svg"
+            path = os.path.join(ARTIFACTS, file)
+            if argument:
+                draw(frame, path, distr_type=argument, graph_title=object_type)
+            else:
+                draw(frame, path, graph_title=object_type)
+            files[name] = file
+        except Exception as error:
+            stats.setdefault("rhythm_errors", []).append(
+                {"object_type": object_type, "picture": name, "error": str(error)}
+            )
+
+    # The spectrum needs a path that cases actually walk, and the most frequent variant IS one — it is a sequence that
+    # happened, in the order it happened. Composing one from the busiest steps sorted by their median timestamp looked
+    # reasonable and produced a sequence no case traverses, which the drawing reported as "min() iterable argument is
+    # empty". A path nobody walks has no spectrum.
+    try:
+        # The spectrum divides by the observed span of each traversal, so a handful of cases that all took the same time
+        # divides by zero. Its own guard rather than a caught exception: "float division by zero" tells a reader nothing.
+        if frame["case:concept:name"].nunique() < 10:
+            stats.setdefault("rhythm_skipped", []).append(
+                {"object_type": object_type, "picture": "spectrum", "reason": "zu wenige Fälle für ein Spektrum"}
+            )
+            return files
+
+        variants = pm4py.get_variants(frame)
+        walked = [
+            steps
+            for steps in sorted(variants, key=lambda key: -variants[key])
+            if len({step for step in steps}) >= 2
+        ]
+        path = list(dict.fromkeys(walked[0]))[:6] if walked else []
+        if len(path) >= 2:
+            file = f"spectrum-{slug}.svg"
+            pm4py.save_vis_performance_spectrum(frame, path, os.path.join(ARTIFACTS, file), graph_title=object_type)
+            files["spectrum"] = file
+        else:
+            stats.setdefault("rhythm_skipped", []).append(
+                {"object_type": object_type, "picture": "spectrum", "reason": "kein Fall geht über zwei verschiedene Schritte"}
+            )
+    except Exception as error:
+        stats.setdefault("rhythm_errors", []).append(
+            {"object_type": object_type, "picture": "spectrum", "error": str(error)}
+        )
+
+    return files
+
+
+def people(frame, slug, object_type, stats):
+    """
+    The roles the work reveals, and the work that is handed out and comes back.
+
+    Both are about people and neither is readable from the directory. `roles` groups whoever does the same steps —
+    the org chart says who reports to whom, this says who does the same job, and the two disagree more often than
+    anybody expects. `subcontracting` finds A → B → A: work given away and returned, which is the shape behind an
+    approval loop that costs days and looks like two ordinary approvals in any count.
+    """
+    if "org:resource" not in frame.columns:
+        return None
+
+    # Roles are derived from who does the same steps, and subcontracting from who hands work on. Both reduce over an
+    # array that is empty when there is barely anybody: three people and five steps produce a library error rather than
+    # a finding, and a finding is what this is for.
+    if frame["org:resource"].nunique() < 3 or len(frame) < 20:
+        return None
+
+    result = {"object_type": object_type}
+    try:
+        result["roles"] = [
+            {"steps": sorted(role.activities), "people": len(role.originator_importance)}
+            for role in pm4py.discover_organizational_roles(frame)
+        ]
+    except Exception as error:
+        stats.setdefault("people_errors", []).append({"object_type": object_type, "error": str(error)})
+
+    try:
+        network = pm4py.discover_subcontracting_network(frame)
+        # Self-pairs dropped: A → A → A is somebody doing their own step twice, and reporting "this person hands work to
+        # themselves" as subcontracting is a finding that cannot be acted on. The top rows were exactly that.
+        handed = sorted(
+            (
+                {"from": pair[0], "to": pair[1], "strength": round(float(strength), 3)}
+                for pair, strength in network.connections.items()
+                if pair[0] != pair[1]
+            ),
+            key=lambda row: -row["strength"],
+        )[:10]
+        if handed:
+            result["subcontracting"] = handed
+    except Exception as error:
+        stats.setdefault("people_errors", []).append({"object_type": object_type, "error": str(error)})
+
+    return result if len(result) > 1 else None
+
+
+def segments(frame, object_type):
+    """
+    Step sequences that always travel together.
+
+    A candidate for a name: four steps that occur in this order in hundreds of cases are one thing people do, and
+    calling it one thing is what turns a twenty-box diagram into something a person can hold in their head. Nothing
+    here decides anything — it is a list to read.
+    """
+    try:
+        counted = pm4py.get_frequent_trace_segments(frame, min_occ=max(5, len(frame) // 200))
+    except ImportError as error:
+        # Said out loud: pm4py leaves prefixspan optional, and an empty list would read as "nothing travels together"
+        # rather than "nobody installed the thing that looks".
+        return {"object_type": object_type, "unavailable": str(error)}
+    except Exception:
+        return None
+
+    found = []
+    for segment, count in counted.most_common(40):
+        steps = [step for step in segment if step != "..."]
+        # Two REAL steps, and two different ones: a repeated step is rework and already has its own panel, while a
+        # sequence worth a name is two things that always happen together.
+        if len(steps) >= 2 and len(set(steps)) >= 2:
+            found.append({"steps": steps, "occurrences": count})
+        if len(found) == 12:
+            break
+    return {"object_type": object_type, "found": found} if found else None
 
 
 def bpmn(frame, slug, object_type, stats):

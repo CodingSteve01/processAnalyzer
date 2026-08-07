@@ -16,7 +16,21 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// <param name="Group">A group name from the source directory, or <c>null</c> for everybody.</param>
 /// <param name="HasStep">Only cases that went through this step at some point, or <c>null</c>.</param>
 /// <param name="WithoutStep">Only cases that never went through this step, or <c>null</c>.</param>
-public sealed record Scope(Period Period, string? Group, string? HasStep = null, string? WithoutStep = null)
+/// <param name="Property">
+/// One classification of the case: its kind, its area, purchase or sale. Without it every document kind is
+/// the same process and every duration is an average over things that have nothing to do with each other.
+/// </param>
+/// <param name="PropertyValue">
+/// Which value of it, or <c>null</c> for "classified at all" — the question behind every coverage gap.
+/// </param>
+public sealed record Scope(
+    Period Period,
+    string? Group,
+    string? HasStep = null,
+    string? WithoutStep = null,
+    string? Property = null,
+    string? PropertyValue = null
+)
 {
     /// <summary>No filter at all — every case, everybody.</summary>
     public static Scope Everything { get; } = new(Period.All, null);
@@ -27,8 +41,18 @@ public sealed record Scope(Period Period, string? Group, string? HasStep = null,
         string? until,
         string? group,
         string? hasStep = null,
-        string? withoutStep = null
-    ) => new(Period.FromQuery(from, until), Trimmed(group), Trimmed(hasStep), Trimmed(withoutStep));
+        string? withoutStep = null,
+        string? property = null,
+        string? propertyValue = null
+    ) =>
+        new(
+            Period.FromQuery(from, until),
+            Trimmed(group),
+            Trimmed(hasStep),
+            Trimmed(withoutStep),
+            Trimmed(property),
+            Trimmed(propertyValue)
+        );
 
     private static string? Trimmed(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -42,6 +66,8 @@ public sealed record Scope(Period Period, string? Group, string? HasStep = null,
             ("scopeGroup", Group is null ? DBNull.Value : Group),
             ("scopeHasStep", HasStep is null ? DBNull.Value : HasStep),
             ("scopeWithoutStep", WithoutStep is null ? DBNull.Value : WithoutStep),
+            ("scopeProperty", Property is null ? DBNull.Value : Property),
+            ("scopePropertyValue", PropertyValue is null ? DBNull.Value : PropertyValue),
         ];
 
     /// <summary>

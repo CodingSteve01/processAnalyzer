@@ -46,6 +46,28 @@ public sealed class AnalyticsRepository
         );
 
     /// <summary>
+    /// Which classifications exist, and how many cases carry each value.
+    /// </summary>
+    /// <remarks>
+    /// The list a reader picks a property filter from — and, read as a whole, the honest answer to "can we even see
+    /// this distinction yet". A property that covers three per cent of its cases is not a filter, it is a coverage gap,
+    /// and the share travels with the list so nobody has to find that out by filtering and getting an empty screen.
+    /// <para>
+    /// Deliberately unscoped, like the group list: the options a filter offers must not depend on the filter that is
+    /// currently applied, or narrowing once makes the way back invisible.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> PropertiesAsync(CancellationToken ct) =>
+        QueryAsync(
+            """
+            SELECT object_type, prozess, name, value, faelle, anteil
+            FROM analytics.property_coverage
+            ORDER BY name, faelle DESC
+            """,
+            ct
+        );
+
+    /// <summary>
     /// What is in the log: which processes exist, how much of each, and over what period.
     /// </summary>
     /// <remarks>
@@ -68,7 +90,7 @@ public sealed class AnalyticsRepository
             JOIN analytics.object_lifecycle l ON l.object_id = o.id
             WHERE (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-              AND analytics.case_in_scope(o.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(o.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1
             ORDER BY events DESC
             """,
@@ -96,7 +118,7 @@ public sealed class AnalyticsRepository
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1, 2
             ORDER BY events DESC
             """,
@@ -127,7 +149,7 @@ public sealed class AnalyticsRepository
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND NOT is_open
+              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND NOT is_open
             """,
             ct,
             [("objectType", objectType), .. scope.Parameters()]
@@ -161,7 +183,7 @@ public sealed class AnalyticsRepository
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND prev_type IS NOT NULL
+              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND prev_type IS NOT NULL
             GROUP BY 1, 2, 3, 4
             ORDER BY total_seconds DESC
             LIMIT 25
@@ -183,7 +205,7 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY 1, 2
             ),
             total AS (
@@ -191,7 +213,7 @@ public sealed class AnalyticsRepository
                 FROM analytics.object_timeline WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             )
             SELECT analytics.label_activity(event_type) AS event_type,
                    event_type                                               AS event_type_key,
@@ -229,14 +251,14 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                   AND (raw_event_type LIKE '%discarded%' OR raw_event_type LIKE '%rejected%'
                        OR attrs ->> 'status' = 'Error' OR attrs ->> 'succeeded' = 'false')
             ),
             total AS (SELECT count(*)::numeric AS n FROM analytics.object_lifecycle WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep))
+              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue))
             SELECT analytics.label_activity(f.event_type) AS event_type,
                    f.event_type                                            AS event_type_key,
                    count(DISTINCT f.object_id)                             AS cases,
@@ -247,13 +269,13 @@ public sealed class AnalyticsRepository
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-                      AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
+                      AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND l.object_id IN (SELECT object_id FROM flagged)) AS median_with,
                    (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_seconds)
                     FROM analytics.object_lifecycle l
                     WHERE l.object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-                      AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
+                      AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND l.object_id NOT IN (SELECT object_id FROM flagged)) AS median_without
             FROM flagged f
             GROUP BY 1, 2
             ORDER BY cases DESC
@@ -282,7 +304,7 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY object_id
             ),
             agg AS (
@@ -348,7 +370,7 @@ public sealed class AnalyticsRepository
             WHERE l.is_open
               AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-              AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1, 2, 3, 4
             HAVING count(*) > 0
             ORDER BY sum(EXTRACT(EPOCH FROM ((SELECT now FROM latest) - l.last_ts))) DESC
@@ -384,7 +406,7 @@ public sealed class AnalyticsRepository
                 WHERE t.prev_type IS NOT NULL
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             norm AS (
                 SELECT object_type, prev_type, event_type,
@@ -436,7 +458,7 @@ public sealed class AnalyticsRepository
                        OR t.raw_event_type LIKE '%released%')
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             first_touch AS (
                 SELECT DISTINCT ON (t.object_id) t.object_id, t.actor_key, t.event_type, t.event_id
@@ -493,7 +515,7 @@ public sealed class AnalyticsRepository
             WHERE t.actor_key = @actorKey
               AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1, 2, 3, 4
             ORDER BY count(*) DESC
             LIMIT 60
@@ -528,7 +550,7 @@ public sealed class AnalyticsRepository
               AND t.event_type = @activity
               AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1
             ORDER BY 1
             """,
@@ -564,7 +586,7 @@ public sealed class AnalyticsRepository
                   AND NOT is_open
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             steps AS (
                 SELECT DISTINCT object_id, event_type
@@ -625,12 +647,12 @@ public sealed class AnalyticsRepository
                     FROM analytics.object_timeline WHERE object_type = @objectType
                       AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                      AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep))     AS manual_event_share
+                      AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue))     AS manual_event_share
             FROM analytics.object_lifecycle
             WHERE object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND NOT is_open
+              AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND NOT is_open
             """,
             ct,
             [("objectType", objectType), .. scope.Parameters()]
@@ -654,7 +676,7 @@ public sealed class AnalyticsRepository
                 WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND prev_type IS NOT NULL
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND prev_type IS NOT NULL
                 GROUP BY 1, 2
             ),
             p AS (
@@ -671,7 +693,7 @@ public sealed class AnalyticsRepository
                 FROM analytics.object_timeline WHERE object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) GROUP BY 1
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) GROUP BY 1
             )
             SELECT analytics.label_activity(act.event_type) AS event_type,
                    act.event_type                          AS event_type_key,
@@ -707,7 +729,7 @@ public sealed class AnalyticsRepository
             WHERE t.object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
               AND t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
             GROUP BY 1, 2
             HAVING count(DISTINCT t.object_id) >= 5
@@ -738,7 +760,7 @@ public sealed class AnalyticsRepository
                 WHERE t.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 ORDER BY t.object_id, t.seq DESC
             )
             SELECT analytics.label_activity(s.event_type) AS last_activity,

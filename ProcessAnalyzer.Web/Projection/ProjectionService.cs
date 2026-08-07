@@ -148,6 +148,9 @@ public sealed class ProjectionService
         // Order matters: the lifecycle measures durations in the clock of its process and decides whether a case is
         // finished from that process's end steps, and both of those are derived from the timeline. Refreshing the
         // lifecycle first would date it against the log it was built from.
+        // What the objects ARE, before anything groups by it. Idempotent and independent of the batch, so an interrupted
+        // run or a mirror that gained the column halfway through its history heals here rather than staying half-classified.
+        await db.Database.ExecuteSqlRawAsync("SELECT ocel.project_object_attributes()", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_timeline", ct);
         // Who the actors are, before anything asks whether a person was involved. The lifecycle reads it through
         // analytics.is_person, so a stale identity would date every automation figure by one run.
