@@ -1,2 +1,4 @@
 pm4py==2.7.15
 graphviz==0.20.3
+# get_frequent_trace_segments needs it; pm4py declares it optional. MIT, pure Python.
+prefixspan==0.5.2

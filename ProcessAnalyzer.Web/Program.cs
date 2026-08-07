@@ -80,9 +80,11 @@ else
 builder.Services.AddSingleton<JournalMirror>();
 builder.Services.AddSingleton<ProjectionService>();
 builder.Services.AddSingleton<AnalyticsRepository>();
+builder.Services.AddSingleton<RoleRepository>();
 builder.Services.AddSingleton<DiscoveryRepository>();
 builder.Services.AddSingleton<CaseRepository>();
 builder.Services.AddSingleton<DirectorySync>();
+builder.Services.AddSingleton<SavedViewSync>();
 builder.Services.AddSingleton<OcelSqliteExporter>();
 builder.Services.AddSingleton<VocabularyLoader>();
 

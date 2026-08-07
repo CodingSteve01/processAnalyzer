@@ -44,7 +44,7 @@ public sealed class CaseRepository
                 WHERE t.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 ORDER BY t.object_id, t.seq DESC
             )
             SELECT split_part(l.object_id, ':', 2)                       AS nummer,
@@ -60,7 +60,7 @@ public sealed class CaseRepository
             WHERE l.object_type = @objectType
               AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-              AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
               AND (@lastActivity = '' OR s.event_type = @lastActivity)
               AND (
                   @withActivity = ''
@@ -187,7 +187,7 @@ public sealed class CaseRepository
                 WHERE l.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND NOT l.is_open
+                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND NOT l.is_open
                 GROUP BY 1
             ),
             rework AS (
@@ -200,7 +200,7 @@ public sealed class CaseRepository
                 WHERE l.object_type = @objectType
                   AND (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep) AND NOT l.is_open
+                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue) AND NOT l.is_open
                 GROUP BY 1
             )
             SELECT w.woche,

@@ -21,7 +21,7 @@ public static class MiningEndpoints
     /// the directory is shared with another container and a path fragment would turn this into a file-read primitive.
     /// </summary>
     private static readonly System.Text.RegularExpressions.Regex ProcessModel = new(
-        @"^(process-[a-z0-9-]{1,60}-(frequency|performance|main)|(bpmn|petri|flow)-[a-z0-9-]{1,60})\.svg$",
+        @"^(process-[a-z0-9-]{1,60}-(frequency|performance|main)|(bpmn|petri|flow|dotted|duration|hours|spectrum)-[a-z0-9-]{1,60})\.svg$",
         System.Text.RegularExpressions.RegexOptions.Compiled
     );
 
