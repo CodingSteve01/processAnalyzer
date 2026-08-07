@@ -21,16 +21,18 @@ const rowsOf = (response) => (Array.isArray(response) ? response : (response?.ro
 const day = (value) => (value ? new Date(value).toLocaleDateString('de-DE') : '—');
 
 export async function renderRoleSignals() {
-  const [vocabulary, profiles, screens] = await Promise.all([
+  const [vocabulary, profiles, screens, layouts, sharing] = await Promise.all([
     request('/api/roles/vocabulary').then(rowsOf),
     request('/api/roles/profiles').then(rowsOf),
     request('/api/roles/screens').then(rowsOf),
+    request('/api/roles/layouts').then(rowsOf),
+    request('/api/roles/layout-sharing').then(rowsOf),
   ]);
 
   // Nothing to show is the normal state until the views have been pulled once. Saying so beats three empty tables that
   // read as "nobody configured anything".
   if (!vocabulary.length && !profiles.length) {
-    for (const id of ['roleVocabulary', 'roleProfiles', 'roleScreens']) {
+    for (const id of ['roleVocabulary', 'roleProfiles', 'roleScreens', 'roleLayouts', 'roleLayoutSharing']) {
       const host = $(id);
       if (host) host.innerHTML = '';
     }
@@ -45,6 +47,7 @@ export async function renderRoleSignals() {
   renderVocabulary(vocabulary);
   renderProfiles(profiles);
   renderScreens(screens);
+  renderLayouts(layouts, sharing);
 }
 
 /** What the three tables add up to, in one sentence — including the part nobody would notice by scrolling. */
@@ -137,6 +140,85 @@ function renderScreens(rows) {
             <td class="num">${nf.format(row.ansichten)}</td>
             <td class="num">${nf.format(row.verschiedene_filter)}</td>
             <td class="num">${nf.format(row.verschiedene_spalten)}</td>
+          </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
+}
+
+/**
+ * The column layouts per screen, with who shares one.
+ *
+ * The rows worth acting on are at both ends: a layout many people share is what a rebuilt screen should look like, and a
+ * layout exactly one person has is either a specialist need or a leftover — and only a person can tell which.
+ */
+function renderLayouts(layouts, sharing) {
+  const host = $('roleLayouts');
+  if (!host) return;
+
+  if (!layouts.length) {
+    host.innerHTML = '<p class="empty">Keine gespeicherten Spaltenansichten im Spiegel.</p>';
+    return;
+  }
+
+  const alone = layouts.filter((row) => Number(row.personen) === 1).length;
+  const perScreen = new Map();
+  for (const row of layouts) perScreen.set(row.path, (perScreen.get(row.path) ?? 0) + 1);
+  const worst = [...perScreen.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  host.innerHTML = `
+    <p class="hint">
+      ${nf.format(layouts.length)} verschiedene Spaltenansichten auf ${nf.format(perScreen.size)} Masken.
+      ${nf.format(alone)} davon nutzt genau eine Person.
+      ${worst ? `Am uneinheitlichsten: <code>${escape(worst[0])}</code> mit ${nf.format(worst[1])} Ansichten.` : ''}
+    </p>
+    <table class="data">
+      <thead><tr><th>Maske</th><th class="num">Personen</th><th class="num">Ansichten</th>
+                 <th class="num">Spalten</th><th>Spaltenfolge</th></tr></thead>
+      <tbody>
+        ${layouts
+          .slice(0, 120)
+          .map(
+            (row) => `
+          <tr${Number(row.personen) === 1 ? ' class="attention-row"' : ''}>
+            <td><code>${escape(row.path)}</code></td>
+            <td class="num">${nf.format(row.personen)}</td>
+            <td class="num">${nf.format(row.ansichten)}</td>
+            <td class="num">${nf.format(row.spalten)}</td>
+            <td class="small">${escape(row.spaltenfolge ?? '')}</td>
+          </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
+
+  renderSharing(sharing);
+}
+
+function renderSharing(rows) {
+  const host = $('roleLayoutSharing');
+  if (!host) return;
+
+  if (!rows.length) {
+    // Not an error: it means every layout belongs to exactly one person, which is itself the finding.
+    host.innerHTML = '<p class="hint">Keine zwei Personen teilen sich eine Spaltenansicht.</p>';
+    return;
+  }
+
+  host.innerHTML = `
+    <h4>Wer arbeitet mit derselben Ansicht</h4>
+    <table class="data">
+      <thead><tr><th>Maske</th><th>Person</th><th>teilt mit</th></tr></thead>
+      <tbody>
+        ${rows
+          .slice(0, 150)
+          .map(
+            (row) => `
+          <tr>
+            <td><code>${escape(row.path)}</code></td>
+            <td>${escape(row.person)}</td>
+            <td>${escape(row.teilt_mit)}</td>
           </tr>`
           )
           .join('')}

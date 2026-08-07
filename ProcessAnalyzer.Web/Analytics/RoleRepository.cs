@@ -73,4 +73,43 @@ public sealed class RoleRepository
             """,
             ct
         );
+
+    /// <summary>
+    /// Which column layouts exist per screen, and how many people share each.
+    /// </summary>
+    /// <remarks>
+    /// The question a user-interface rebuild has to answer. Not "which columns exist" — the schema says that — but which
+    /// combinations people actually put on screen. A screen with sixty people on one layout can be rebuilt from that
+    /// layout; a screen with eight people on eight layouts cannot be rebuilt until somebody looks at why.
+    /// <para>
+    /// Identified by the ORDERED column list: two people with the same columns in a different order have arranged their
+    /// work differently, and collapsing them would hide the difference this is looking for.
+    /// </para>
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> LayoutsAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT path, layout_key, personen, ansichten, spalten, spaltenfolge
+            FROM analytics.column_layout
+            """,
+            ct
+        );
+
+    /// <summary>
+    /// Who shares a layout with whom.
+    /// </summary>
+    /// <remarks>
+    /// The pair list behind the counts, so "these two work the same way" is a name rather than a number — and so a
+    /// layout that looks shared but is one person with three saved views does not read as agreement.
+    /// </remarks>
+    public Task<List<Dictionary<string, object?>>> LayoutSharingAsync(CancellationToken ct) =>
+        Query.RunAsync(
+            _factory,
+            """
+            SELECT path, layout_key, person, teilt_mit
+            FROM analytics.layout_sharing
+            """,
+            ct
+        );
 }
