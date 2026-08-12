@@ -13,7 +13,7 @@ namespace ProcessAnalyzer.Web.Migrations;
 /// </summary>
 /// <remarks>
 /// A separate migration rather than an edit to the previous one: 007-identity.sql has already run on every database
-/// that exists, and changing a shipped migration only changes what a fresh install gets — the running ones keep the
+/// that exists, and changing a shipped migration only changes what a fresh install gets: the running ones keep the
 /// old function and quietly disagree with the code.
 /// </remarks>
 [DbContext(typeof(AppDbContext))]

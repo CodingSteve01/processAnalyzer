@@ -1,7 +1,7 @@
 -- Which payload attribute names a step, as data rather than as a chain of CASE branches.
 --
 -- The event type alone is not enough. Two approvals by two different roles are two steps of the process, not the same
--- step twice — with the bare type they are indistinguishable, so every multi-role approval reads as 100 % rework and
+-- step twice: with the bare type they are indistinguishable, so every multi-role approval reads as 100 % rework and
 -- every variant collapses into "granted → granted".
 --
 -- Which attribute carries that distinction is a property of the source: one names it 'role', the next 'actionType',
@@ -20,7 +20,7 @@ CREATE TABLE ocel.discriminator_rule (
     PRIMARY KEY (priority, type_match, attr_name)
 );
 
--- STABLE, not IMMUTABLE: it reads a table now. Only views and queries call it — no index depends on it, so the
+-- STABLE, not IMMUTABLE: it reads a table now. Only views and queries call it: no index depends on it, so the
 -- weaker guarantee costs nothing here, and claiming IMMUTABLE while reading a table is how a plan caches a label
 -- from before the vocabulary was corrected.
 CREATE OR REPLACE FUNCTION analytics.activity_of(p_type text, p_attrs jsonb)

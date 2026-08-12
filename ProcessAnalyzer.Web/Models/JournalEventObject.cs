@@ -1,7 +1,7 @@
 namespace ProcessAnalyzer.Web.Models;
 
-// The object side of the journal: which business objects an event touched, and in which role. This is what
-// makes the data object-centric later — an event is not "an order event", it is an event that references an
+// The object side of the journal, which business objects an event touched, and in which role. This is what
+// makes the data object-centric later: an event is not "an order event", it is an event that references an
 // order, a tour and a vehicle with different qualifiers.
 public sealed class JournalEventObject
 {

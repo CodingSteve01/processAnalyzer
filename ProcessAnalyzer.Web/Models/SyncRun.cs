@@ -1,7 +1,7 @@
 namespace ProcessAnalyzer.Web.Models;
 
 // One pull or sweep attempt. Persisted even when it fails, because "the mirror is complete" is a claim that
-// can only be defended with an unbroken run history — a pull that silently did nothing looks identical to a
+// can only be defended with an unbroken run history: a pull that silently did nothing looks identical to a
 // pull that never started unless it left a row here.
 public sealed class SyncRun
 {
@@ -22,7 +22,7 @@ public sealed class SyncRun
     public int Objects { get; set; }
 
     // Events read from the source but deliberately not committed yet because they fall inside the lag
-    // window. Not a loss — they get picked up once the source has settled.
+    // window. Not a loss: they get picked up once the source has settled.
     public int HeldBack { get; set; }
 
     // Source ids the sweep found missing from the mirror. Anything above zero here means the plain

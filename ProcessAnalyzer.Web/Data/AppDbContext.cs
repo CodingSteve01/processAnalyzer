@@ -29,7 +29,7 @@ public sealed class AppDbContext : DbContext
 
         // Phase 2 attaches here: the ocel.* (object-centric event log) and analytics.* schemas are projected
         // from journal.* and get their own ConfigureOcel(modelBuilder) call. They are intentionally absent in
-        // phase 1 — the mirror has to be proven correct before anything is derived from it.
+        // phase 1: the mirror has to be proven correct before anything is derived from it.
     }
 
     private static void ConfigureJournalEvent(ModelBuilder modelBuilder)
@@ -75,7 +75,7 @@ public sealed class AppDbContext : DbContext
             .IsRequired();
         e.Property(x => x.ProjectionVersion).HasColumnName("projection_version").HasDefaultValue(0).IsRequired();
 
-        // Unique on the source's own event id — the last line of defence against double-inserting an event
+        // Unique on the source's own event id: the last line of defence against double-inserting an event
         // when a re-pull overlaps a range we already have.
         e.HasIndex(x => x.EventId).IsUnique().HasDatabaseName("ix_journal_event_event_id");
 
@@ -127,7 +127,7 @@ public sealed class AppDbContext : DbContext
             .IsUnique()
             .HasDatabaseName("ux_journal_eo_natural");
 
-        // "Everything that ever happened to this object" — the lookup the whole object-centric view rests on.
+        // "Everything that ever happened to this object": the lookup the whole object-centric view rests on.
         o.HasIndex(x => new { x.ObjectType, x.ObjectId }).HasDatabaseName("ix_journal_eo_object");
         o.HasIndex(x => x.EventSourceId).HasDatabaseName("ix_journal_eo_event");
     }

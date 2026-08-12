@@ -31,7 +31,7 @@ public sealed record SourceEventObject(
 );
 
 /// The one interface in the project. The whole point of phase 1 is proving the watermark rule, and that has to be
-/// testable without a SQL Server. The seam is here and nowhere else — an interface per class buys nothing.
+/// testable without a SQL Server. The seam is here and nowhere else: an interface per class buys nothing.
 public interface IJournalSource
 {
     Task<IReadOnlyList<SourceEvent>> ReadEventsAsync(long afterId, int batchSize, CancellationToken ct);

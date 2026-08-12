@@ -24,7 +24,7 @@ public sealed class JournalPullServiceTests : IAsyncLifetime
     /// The rule the entire pull exists for. A journal row becomes visible at commit time, not at
     /// insert time, so id order and visibility order are not the same. If the pull skipped the row
     /// inside the lag window and took the older row behind it, the watermark would move past the
-    /// skipped id and that event would never be read again — a silent, permanent hole.
+    /// skipped id and that event would never be read again, a silent and permanent hole.
     /// </summary>
     [Fact]
     public async Task Pull_StopsAtTheFirstRowInsideTheLagWindow_AndDoesNotSkipPastIt()
@@ -33,7 +33,7 @@ public sealed class JournalPullServiceTests : IAsyncLifetime
         var source = new FakeJournalSource([
             FakeJournalSource.NewEvent(1, now.AddMinutes(-10)),
             FakeJournalSource.NewEvent(2, now.AddMinutes(-9)),
-            // Inside the 120 s window — the pull must stop here.
+            // Inside the 120 s window: the pull must stop here.
             FakeJournalSource.NewEvent(3, now),
             // Old enough on its own, but it sits behind row 3 and must not be taken.
             FakeJournalSource.NewEvent(4, now.AddMinutes(-8)),
@@ -139,7 +139,7 @@ public sealed class JournalPullServiceTests : IAsyncLifetime
     /// <summary>
     /// The lag window narrows the race, it does not close it: a transaction that stays open longer
     /// than LagSeconds still commits behind the watermark. The sweep is the only thing that finds
-    /// those rows, and it must fill the hole without touching the watermark — moving it backwards
+    /// those rows, and it must fill the hole without touching the watermark, because moving it backwards
     /// would re-pull everything, moving it forwards would skip whatever the pull has not seen yet.
     /// </summary>
     [Fact]
@@ -187,7 +187,7 @@ public sealed class JournalPullServiceTests : IAsyncLifetime
         var result = await service.PullOnceAsync(CancellationToken.None);
 
         // An unconfigured sidecar has to start and say so. What it must not do is fill the run history with
-        // refusals — that would make "the pull is idle" indistinguishable from "the pull is broken".
+        // refusals, which would make "the pull is idle" indistinguishable from "the pull is broken".
         Assert.False(result.Ran);
         Assert.Equal("no journal source configured", result.Error);
         await using var db = await _postgres.Factory.CreateDbContextAsync(CancellationToken.None);

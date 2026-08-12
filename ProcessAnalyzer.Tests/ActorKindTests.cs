@@ -10,7 +10,7 @@ namespace ProcessAnalyzer.Tests;
 /// </summary>
 /// <remarks>
 /// Every case here reproduces something that shipped. The source sends the same account id with performer type 'User'
-/// and 'Device' — a driver confirming from the tablet and correcting at the desk — and the tool treated that pair as an
+/// and 'Device' (a driver confirming from the tablet and correcting at the desk), and the tool treated that pair as an
 /// identity. dim.actor_role then had two rows for that person, joining it to the event log counted their work twice, and
 /// the roles screen reported 17 420 steps under "Gerät" over a log holding 336 device events. "43 % of all steps are done
 /// by the machine" was that double count, and nobody could have spotted it from the screen.
@@ -159,7 +159,7 @@ public sealed class ActorKindTests
 
         // The case starts with a release by the manager and is released again by a colleague afterwards. Neither of them
         // submitted anything, so there is no submitter and no pair. The screen used to name the manager as the person who
-        // submitted and the colleague as the one deciding over him — the exact opposite of what happened.
+        // submitted and the colleague as the one deciding over him, the exact opposite of what happened.
         Assert.Empty(rows);
     }
 

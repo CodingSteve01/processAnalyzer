@@ -63,7 +63,7 @@ public static class SyncEndpoints
 
     // Runs on ApplicationStopping, never on the request token. A pull that dies halfway because someone closed
     // the tab would leave written events behind an un-advanced watermark, or worse, an advanced watermark with
-    // unwritten events — the exact loss this phase is meant to prove impossible.
+    // unwritten events: the exact loss this phase is meant to prove impossible.
     private static void StartDetached(
         JournalPullService pull,
         IHostApplicationLifetime lifetime,

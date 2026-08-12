@@ -5,9 +5,9 @@
 // wrong, and every row leads to the thing itself.
 //
 // Three questions, in the order somebody would ask them:
-//   what is waiting     — which cases are standing at which step, and how long already
-//   what went wrong     — cases whose timing is out of the ordinary, not "slower than average" but different
-//   what nobody saw     — the same person submitted and decided
+//   what is waiting      which cases are standing at which step, and how long already
+//   what went wrong      cases whose timing is out of the ordinary, not "slower than average" but different
+//   what nobody saw      the same person submitted and decided
 //
 // None of it is new data. It is the same log, asked a question about now instead of about the average.
 

@@ -2,7 +2,7 @@ namespace ProcessAnalyzer.Web.Models;
 
 // One mirrored row of the business-event journal. This table is a mirror, not a model of its own:
 // every column except the pull bookkeeping (PulledAt, ProjectionVersion, PayloadRaw) is a verbatim copy of
-// the source row. Nothing here may be edited after insert — corrections come from re-reading the source.
+// the source row. Nothing here may be edited after insert: corrections come from re-reading the source.
 public sealed class JournalEvent
 {
     // BusinessEvents.Id in the source. Doubles as our cursor, which is why it is assigned by the source and
@@ -15,7 +15,7 @@ public sealed class JournalEvent
 
     public string EventType { get; set; } = "";
 
-    // Business time — when the thing happened. This is the axis process mining runs on.
+    // Business time: when the thing happened. This is the axis process mining runs on.
     public DateTime OccurredAt { get; set; }
 
     // Journal write time. Lags OccurredAt and is the axis the pull watermark reasons about, because only
@@ -34,7 +34,7 @@ public sealed class JournalEvent
     public string? SourceModule { get; set; }
     public string? SourceVersion { get; set; }
 
-    // jsonb. Empty object when the source had no payload — never null, so downstream projections can index
+    // jsonb. Empty object when the source had no payload: never null, so downstream projections can index
     // into it without a null branch per query.
     public string Payload { get; set; } = "{}";
 

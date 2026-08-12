@@ -7,14 +7,14 @@ namespace ProcessAnalyzer.Tests;
 /// </summary>
 /// <remarks>
 /// This exists because the first label set was written against the demo seed rather than against the catalogue, and
-/// named several types only the seed produced — the same fact under a slightly different name. Against demo data every
+/// named several types only the seed produced, the same fact under a slightly different name. Against demo data every
 /// screen looked finished; against a real journal most steps would have rendered as raw dotted identifiers, and nobody
 /// would have noticed until the first person opened the dashboard and found a wall of dots.
 ///
 /// A missing label is not a cosmetic defect: an unlabelled activity is also an unexplained one, and the tool's entire
 /// claim is that somebody who has never seen the process can read what happened.
 ///
-/// These are file checks, not database checks. Coverage is a question about two files — the catalogue and the labels —
+/// These are file checks, not database checks. Coverage is a question about two files, the catalogue and the labels,
 /// so answering it with a container proved the same thing more slowly, and only for the one vocabulary that happened
 /// to be loaded. Now every vocabulary in the checkout is checked, and the rendering rules are tested separately in
 /// <see cref="AnalyticsSqlTests"/>.
@@ -45,7 +45,7 @@ public sealed class LabelCoverageTests
     [MemberData(nameof(Vocabularies))]
     public void NoLabelIsACopyOfTheTechnicalKey(string directory)
     {
-        // A label that still contains a dotted identifier is a copy of the key, not a translation of it — the exact
+        // A label that still contains a dotted identifier is a copy of the key, not a translation of it: the exact
         // failure this whole file guards against, and cheap to catch mechanically.
         var offenders = Vocabulary
             .ReadLabels(directory)
@@ -66,7 +66,7 @@ public sealed class LabelCoverageTests
     [MemberData(nameof(Vocabularies))]
     public void NoTwoStepsShareALabel(string directory)
     {
-        // Two event types under one label merge two steps into a single line on every screen — the same damage as a
+        // Two event types under one label merge two steps into a single line on every screen, the same damage as a
         // collapsed activity label, only harder to spot because the line reads perfectly well.
         var duplicates = Vocabulary
             .ReadLabels(directory)

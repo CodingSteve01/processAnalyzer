@@ -9,7 +9,7 @@ using ProcessAnalyzer.Web.Data;
 namespace ProcessAnalyzer.Web.Migrations;
 
 /// <summary>
-/// The actor dimension and the German labels — the two things that turn a technically correct analysis into one
+/// The actor dimension and the German labels: the two things that turn a technically correct analysis into one
 /// somebody can read without knowing the codebase.
 /// </summary>
 [DbContext(typeof(AppDbContext))]

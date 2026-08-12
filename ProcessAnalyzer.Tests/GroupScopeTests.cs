@@ -10,7 +10,7 @@ namespace ProcessAnalyzer.Tests;
 /// <remarks>
 /// The predicate is written into each query rather than wrapped around them, which is fast and readable and one
 /// forgotten line away from a page that shows unfiltered figures under a control claiming otherwise. Nothing fails
-/// when a filter is merely absent — the number is simply the wrong answer to the question on screen.
+/// when a filter is merely absent: the number is simply the wrong answer to the question on screen.
 /// <para>
 /// So this asserts both directions for every scoped method: rows without a filter, and nothing at all for a group
 /// that does not exist. A query that forgot the predicate keeps returning its rows and fails here.
@@ -113,7 +113,7 @@ public sealed class GroupScopeTests
     /// </summary>
     /// <remarks>
     /// A label cannot be sent back as a filter: the path needs the technical key. A panel that renders a step name
-    /// without carrying its key is a dead end — the row is readable and leads nowhere, which is exactly the complaint
+    /// without carrying its key is a dead end: the row is readable and leads nowhere, which is exactly the complaint
     /// that collapsed nine screens into five. Two of these keys were missing when the tables moved under the process.
     /// </remarks>
     public static TheoryData<string, string> StepNamingPanels =>
@@ -213,7 +213,7 @@ public sealed class GroupScopeTests
 
     /// <summary>
     /// Six cases, two people, six steps each: enough that every panel has something to say, including the ones with a
-    /// floor under them — the handover matrix only reports a pair after five cases, and a seed of one case would make
+    /// floor under them: the handover matrix only reports a pair after five cases, and a seed of one case would make
     /// this test assert that an empty result is correct.
     /// </summary>
     private async Task SeedAsync()

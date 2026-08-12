@@ -1,8 +1,7 @@
 -- The calendar summary, split by what a holiday actually is.
 --
--- The first version counted "factor < 1" as half days, which lumped the full holidays in with them: against real
--- data it reported 122 of 122 days as halves. Nonsense on its face — and nonsense sitting directly above the
--- durations it explains, which is how a screen loses the reader's trust in everything on it.
+-- Counting "factor < 1" as a half day lumps the full holidays in with them and reports every holiday as a half,
+-- directly above the durations it explains.
 
 DROP VIEW IF EXISTS analytics.calendar_summary;
 

@@ -44,7 +44,7 @@ public sealed class JournalMirrorTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The run history is the only place a failure is visible after the fact — the process may have
+    /// The run history is the only place a failure is visible after the fact, since the process may have
     /// restarted since. A run that finished without recording its error, or without an elapsed
     /// time, leaves an operator with nothing to look at but "it seems slow".
     /// </summary>
@@ -81,7 +81,7 @@ public sealed class JournalMirrorTests : IAsyncLifetime
     /// The gap sweep asks this question about a few thousand ids at a time and refills whatever
     /// comes back missing. If it reported an already-mirrored event as unknown the sweep would
     /// re-read it on every pass forever; if it reported a missing one as known the hole would never
-    /// be filled — which is the failure the sweep exists to prevent.
+    /// be filled, which is the failure the sweep exists to prevent.
     /// </summary>
     [Fact]
     public async Task FilterKnownEventIdsAsync_ReturnsExactlyTheIdsTheMirrorAlreadyHas()

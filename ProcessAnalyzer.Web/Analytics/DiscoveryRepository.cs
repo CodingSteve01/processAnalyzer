@@ -119,7 +119,7 @@ public sealed class DiscoveryRepository
             -- Who put this in front of somebody: the first human step that is NOT itself a decision.
             --
             -- Without that condition an approver becomes the submitter whenever the case reached a person for the first
-            -- time at the approval — a scanned document, a job-created row — and the screen then reports the relationship
+            -- time at the approval, a scanned document, a job-created row, and the screen then reports the relationship
             -- upside down: the manager who releases reads as the one who submitted, and the next approver as the one
             -- deciding over him. A case whose only human steps are approvals has no submitter, and then it belongs in no
             -- row at all rather than in a wrong one.
@@ -158,7 +158,7 @@ public sealed class DiscoveryRepository
             )
             -- Ranked inside each process. Document approvals outnumber leave approvals by two orders of magnitude,
             -- and a flat top-100 would answer "who approves invoices" a hundred times and "who approves whose leave"
-            -- never — which is the question that prompted this screen.
+            -- never, which is the question that prompted this screen.
             SELECT analytics.label_object(object_type)              AS worum_geht_es,
                    analytics.person_with_role(eingereicht_von)      AS eingereicht_von,
                    analytics.person_with_role(entschieden_von)      AS entschieden_von,
@@ -200,7 +200,7 @@ public sealed class DiscoveryRepository
                   AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             -- Grouped on the keys, labelled afterwards. The other way round runs person_with_role over every pair
-            -- row before aggregating — four correlated lookups times a few thousand pairs, which turned a 7 ms
+            -- row before aggregating: four correlated lookups times a few thousand pairs, which turned a 7 ms
             -- query into a 13 second request and blocked the whole page behind it.
             pairs AS (
                 SELECT a.object_type, a.actor_key AS links, b.actor_key AS rechts, count(*) AS gemeinsame_faelle
@@ -381,7 +381,7 @@ public sealed class DiscoveryRepository
         );
 
     /// <summary>
-    /// The process landscape: which processes hand work to which, and how much.
+    /// The process landscape, which processes hand work to which, and how much.
     /// </summary>
     /// <remarks>
     /// The mined pictures answer how one process runs, and the combined one is a wall of crossing edges. Neither answers
@@ -394,7 +394,7 @@ public sealed class DiscoveryRepository
     /// </para>
     /// </remarks>
     /// <summary>
-    /// The release ladder: which stages exist, who grants them, how long each one waits.
+    /// The release ladder, which stages exist, who grants them, how long each one waits.
     /// </summary>
     /// <remarks>
     /// Nothing here is configured. A release stage appears because somebody granted one, the people are the ones who
@@ -605,7 +605,7 @@ public sealed class DiscoveryRepository
             -- Two thirds of the types are the generic tier, which is named by rule from an entity noun plus a verb and
             -- has no event label by design. Joining on 'event' alone reported all of them as "not yet named" while they
             -- read as proper German everywhere else, and that turns the one honest page in the tool into the one that
-            -- cries wolf. A type is unnamed here when the rule cannot name it either — the marker does that.
+            -- cries wolf. A type is unnamed here when the rule cannot name it either: the marker does that.
             SELECT r.type_name                                                  AS technischer_typ,
                    analytics.label_activity(r.type_name)                        AS bezeichnung,
                    r.event_count                                                AS beobachtet,

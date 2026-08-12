@@ -13,7 +13,7 @@ namespace ProcessAnalyzer.Web.Migrations;
 /// </summary>
 /// <remarks>
 /// The decision screen read the first human step of a case as the submission. In 170 of 675 document cases that step is
-/// itself a release — the document arrives from a scan or a job and the first person to touch it releases it — so the
+/// itself a release, the document arrives from a scan or a job and the first person to touch it releases it, so the
 /// screen reported the relationship upside down: the manager who approves appeared as the person who submitted.
 /// </remarks>
 [DbContext(typeof(AppDbContext))]

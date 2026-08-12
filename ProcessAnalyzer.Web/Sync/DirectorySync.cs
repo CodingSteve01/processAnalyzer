@@ -176,13 +176,13 @@ public sealed class DirectorySync
         var holidays = new List<(DateTime Day, string? Name, decimal Factor)>();
         await using (var command = source.CreateCommand())
         {
-            // The flags say which halves are HOLIDAY, so the factor is what is left to work — both set means the
+            // The flags say which halves are HOLIDAY, so the factor is what is left to work: both set means the
             // whole day is off, one set means half. Read the other way round the holidays have no effect at all.
             // Confirmed against StatisticCalculationDateData.GetNumberOfHolidayDays in the source.
             //
             // the source keeps 18 holiday calendars, one per site. Loading them all into a table keyed by date meant
             // the last writer won, and a day that is a full holiday in most calendars could end up recorded as half
-            // — the first run against real data reported 167 of 169 days as half days. So one calendar is chosen:
+            //: the first run against real data reported 167 of 169 days as half days. So one calendar is chosen:
             // the one with the most entries when none is configured, which is the company-wide one in practice.
             command.CommandText = """
                 SELECT e.Date, MAX(e.Name) AS Name,
@@ -214,7 +214,7 @@ public sealed class DirectorySync
         await using (var command = source.CreateCommand())
         {
             // Not "the newest entry": there are 87 of them across many calendars, versioned by FromDate, and the
-            // newest overall turned out to be a placeholder with nothing but zeros — which produced no working
+            // newest overall turned out to be a placeholder with nothing but zeros, which produced no working
             // hours at all and would have made every duration in the product zero.
             //
             // Instead: the current version of each calendar, ignoring the ones with no hours anywhere, and the
@@ -286,7 +286,7 @@ public sealed class DirectorySync
 
         if (hours.Count == 7)
         {
-            // A weekday with zero hours is not a working day and must not appear as a slot at all — otherwise a
+            // A weekday with zero hours is not a working day and must not appear as a slot at all: otherwise a
             // Saturday would silently absorb waiting time that nobody was there to work through.
             await ExecuteAsync(connection, "DELETE FROM analytics.business_slot", ct);
             foreach (var (day, dayHours) in hours.Where(pair => pair.Value > 0))

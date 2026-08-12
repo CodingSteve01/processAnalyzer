@@ -5,7 +5,7 @@
 // nightly integration account says 'user' and there is nobody there. The log has no field for the difference and never
 // will, because the difference is knowledge about the company.
 //
-// So this is a list and a control, like the vocabulary — and like the vocabulary, what is set here wins over what was
+// So this is a list and a control, like the vocabulary, and as there, what is set here wins over what was
 // delivered and survives a restart. Unlike the vocabulary, it moves figures: "manual work" and "ran without a person"
 // are counted from it, which is why a correction refreshes them immediately instead of at the next pull.
 

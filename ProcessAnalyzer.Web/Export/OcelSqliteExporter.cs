@@ -82,7 +82,7 @@ public sealed class OcelSqliteExporter
     /// </summary>
     /// <remarks>
     /// The keys are not decoration. pm4py validates them on import and reports every missing one; an export without
-    /// them still loads, which is worse than failing — it would let a duplicated relation through and quietly
+    /// them still loads, which is worse than failing: it would let a duplicated relation through and quietly
     /// inflate every count computed from it. The map tables come first because the type columns reference them.
     /// </remarks>
     private static void CreateCoreTables(SqliteConnection target)

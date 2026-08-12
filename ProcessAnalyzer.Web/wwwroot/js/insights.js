@@ -2,10 +2,10 @@
 //
 // This file used to hold a page of its own: a dropdown to pick a process, and eleven tables about it. The path in
 // drill.js already knows which process the reader is looking at, so the dropdown was a second, competing answer to the
-// same question — and the two could disagree. What remains here is the two things that are NOT about one process:
+// same question, and the two could disagree. What remains here is the two things that are not about one process:
 //
-//   Menschen  — roles, who does which step, who decides about whom, who works with whom
-//   Datenstand — what we do not record yet, which calendar the durations use, what the words mean
+//   Menschen    roles, who does which step, who decides about whom, who works with whom
+//   Datenstand  what we do not record yet, which calendar the durations use, what the words mean
 //
 // Plus the orchestration: which screen builds when, and the two maintenance buttons.
 
@@ -25,7 +25,7 @@ const nf = new Intl.NumberFormat('de-DE');
 /**
  * A duration in the unit it deserves.
  *
- * Releases happen minutes apart, and rounded to hours every one of them read "0,0 h" — a column of zeroes that looks
+ * Releases happen minutes apart, and rounded to hours every one of them read "0,0 h", a column of zeroes that looks
  * like a broken measurement rather than a fast step.
  */
 function duration(seconds) {
@@ -130,7 +130,7 @@ async function renderPeople() {
   wireDrill('whoDoesWhat');
 
   // The person who decided leads to what that person does. The row names two people, and the decider is the one the
-  // reader is asking about — the other is one click further, in the collaboration table below.
+  // reader is asking about. The other is one click further, in the collaboration table below.
   $('decisions').innerHTML = table(
     decisions.slice(0, 25),
     [
@@ -173,7 +173,7 @@ async function renderPeople() {
  * The release ladder, with the people on it.
  *
  * The interesting rows are the ones a settings screen cannot show: a stage held by exactly one person, a stage that is
- * refused rather than granted, and two stages that arrive in either order — which means they are not a ladder at all.
+ * refused rather than granted, and two stages that arrive in either order, which means they are not a ladder at all.
  */
 async function renderReleases() {
   const [stages, chain] = await Promise.all([

@@ -3,7 +3,7 @@
 -- The journal records that user u-217 approved something. That is enough to reconstruct a flow and useless for
 -- understanding an organisation: "a:0e46fff → a:a3c9ff" is not an answer to "which department hands work to which".
 -- The directory turns actors into the roles they act in, which is also the level the analysis is allowed to report
--- at — the group is a legitimate analytical dimension, the person is not.
+-- at: the group is a legitimate analytical dimension, the person is not.
 
 CREATE SCHEMA IF NOT EXISTS dim;
 
@@ -26,7 +26,7 @@ CREATE INDEX ix_actor_group_name ON dim.actor_group (group_name);
 
 -- Somebody in three groups would otherwise be counted three times in every per-role total. The primary role is the
 -- one they actually act in most, derived from their own history rather than from the order the groups happen to be
--- listed in — and it is a view, so it follows the data as behaviour changes.
+-- listed in, and it is a view, so it follows the data as behaviour changes.
 CREATE VIEW dim.actor_primary_role AS
 WITH activity AS (
     SELECT e.actor_key, count(*) AS events

@@ -1,7 +1,7 @@
 // One viewer for every picture in this tool.
 //
 // The diagram page had zoom, fit and reading size; the picture inside the drill-down had none, and a third place would
-// have grown a third set of buttons. Same controls everywhere, same behaviour, and full screen for all of them — a mined
+// have grown a third set of buttons. Same controls everywhere, same behaviour, and full screen for all of them. A mined
 // graph is metres wide and a browser window is not.
 //
 // Graphviz draws black on white, so a picture keeps its own light surface in either theme. That is not a missing dark
@@ -115,7 +115,7 @@ export function attachViewer(container, options = {}) {
   container.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     // Not on something that leads somewhere. Capturing the pointer here swallowed the click, so a box in the landscape
-    // and a step in a mined diagram stopped opening — the drag gesture ate the one interaction the picture is for.
+    // and a step in a mined diagram stopped opening: the drag gesture ate the one interaction the picture is for.
     if (event.target.closest('.lsnode, .node-clickable, a, button')) return;
     drag = { x: event.clientX, y: event.clientY, left: container.scrollLeft, top: container.scrollTop };
     container.setPointerCapture(event.pointerId);
@@ -145,7 +145,7 @@ export function attachViewer(container, options = {}) {
  * wide. What was actually meant is a preview: the picture over everything, as large as the window allows, and one
  * obvious way to close it.
  *
- * The viewer moves into the overlay rather than being rebuilt inside it — one instance, one zoom state, and the controls
+ * The viewer moves into the overlay rather than being rebuilt inside it: one instance, one zoom state, and the controls
  * are the same ones the reader was already using.
  */
 function openPreview(container, toolbar, title, apply, switcher = null) {

@@ -9,7 +9,7 @@ namespace ProcessAnalyzer.Tests;
 /// <remarks>
 /// The fold is the one place where "what a case is" comes into being, and every way it can be wrong is silent: a stale
 /// value, a classification for an object that does not exist, an empty string that erases a real answer. None of those
-/// throw — they produce a screen that groups confidently by the wrong thing.
+/// throw: they produce a screen that groups confidently by the wrong thing.
 /// <para>
 /// It is also deliberately NOT tied to the batch the projection is working on, so these cases include the two orders
 /// that a batch-bound fold would get wrong: a statement that arrives before its object, and a run over history that
@@ -111,7 +111,7 @@ public sealed class ObjectAttributeFoldTests
         Assert.True(await InScopeAsync("document:1", "belegart", "Rechnung"));
         Assert.False(await InScopeAsync("document:2", "belegart", "Rechnung"));
 
-        // A name without a value asks "classified at all" — the question behind every coverage gap.
+        // A name without a value asks "classified at all": the question behind every coverage gap.
         Assert.True(await InScopeAsync("document:2", "belegart", null));
         Assert.False(await InScopeAsync("document:3", "belegart", null));
 
@@ -120,7 +120,7 @@ public sealed class ObjectAttributeFoldTests
         Assert.True(await InScopeAsync("document:3", null, null));
     }
 
-    /// <summary>Six documents and six events to hang statements on. No classifications — each case makes its own.</summary>
+    /// <summary>Six documents and six events to hang statements on. No classifications: each case makes its own.</summary>
     private async Task SeedAsync()
     {
         await _postgres.ResetAsync();
@@ -151,7 +151,7 @@ public sealed class ObjectAttributeFoldTests
     /// <summary>The source stating a classification on an object reference, the way the mirror receives it.</summary>
     /// <remarks>
     /// The row key is derived from the event and the document number rather than generated, so a case can state twice
-    /// about the same object from two different events without colliding — which is exactly the ordering these tests
+    /// about the same object from two different events without colliding, which is exactly the ordering these tests
     /// are about.
     /// </remarks>
     private async Task StateAsync(long eventSourceId, string objectRef, string attributes)

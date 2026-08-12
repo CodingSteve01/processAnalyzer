@@ -1,7 +1,7 @@
 -- Names instead of pseudonyms, when the operator turns them on.
 --
 -- The pseudonym default exists for a reason and stays the default. But "we do not even know who approves whose
--- leave" is a real gap in running a company, and it cannot be answered by a pseudonym — the answer IS the name.
+-- leave" is a real gap in running a company, and it cannot be answered by a pseudonym: the answer IS the name.
 -- So identity is a switch with two honest positions, not a permanent no.
 --
 -- What the switch does NOT change: the raw source id never leaves dim.actor, and no screen ranks people against
@@ -39,7 +39,7 @@ AS $$
 $$;
 
 -- Person plus the group they act in: "Anna Beispiel (Buchhaltung)". Superseded by 008, which stops rendering a
--- pseudonym for machines — kept here as it shipped, because a migration that already ran must not be rewritten.
+-- pseudonym for machines: kept here as it shipped, because a migration that already ran must not be rewritten.
 CREATE OR REPLACE FUNCTION analytics.person_with_role(p_actor_key text)
 RETURNS text
 LANGUAGE sql

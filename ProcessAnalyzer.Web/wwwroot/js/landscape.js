@@ -2,7 +2,7 @@
 //
 // The mined pictures answer how ONE process runs, and the combined one is a wall of crossing edges. Neither answers the
 // question somebody asks first, in front of a tool like this: what happens here, from one end to the other. That answer
-// needs no mining — an event that touches two kinds of object IS the handover between them, and there are thousands of
+// needs no mining, because an event touching two kinds of object is itself the handover between them, and there are
 // them in the log.
 //
 // Drawn here rather than by the miner, for three reasons: it has to be clickable, it has to redraw when the scope
@@ -83,8 +83,8 @@ function collectNodes(edges) {
 /**
  * How far each process sits from the start of a chain.
  *
- * Longest path, relaxed as many times as there are nodes. Cycles exist in real data — an order that spawns a tour whose
- * papers come back to the order — and a strict topological sort would refuse to draw anything at all. Bounding the
+ * Longest path, relaxed as many times as there are nodes. Cycles exist in real data, such as an order that spawns a
+ * tour whose papers come back to the order, and a strict topological sort would refuse to draw anything. Bounding the
  * relaxation resolves a cycle arbitrarily but always terminates, which is the right trade for a picture.
  */
 function rank(nodes, edges) {

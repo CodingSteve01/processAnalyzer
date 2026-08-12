@@ -68,7 +68,7 @@ public sealed class AnalyticsRepository
         );
 
     /// <summary>
-    /// What is in the log: which processes exist, how much of each, and over what period.
+    /// What is in the log, which processes exist, how much of each, and over what period.
     /// </summary>
     /// <remarks>
     /// Scoped like everything else. It was not, and with a step filter set the headline said 717 cases while the figures
@@ -338,7 +338,7 @@ public sealed class AnalyticsRepository
     /// What is waiting right now, and for how long.
     /// </summary>
     /// <remarks>
-    /// Everything else in this tool looks backwards. This looks at the desk: which cases are standing at which step, how
+    /// Everything else in this tool looks backwards. This looks at the desk, which cases are standing at which step, how
     /// long they have been standing there, and who touched them last. It is the one screen somebody can act on before
     /// lunch rather than in the next process workshop.
     /// <para>

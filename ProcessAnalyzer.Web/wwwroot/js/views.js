@@ -32,7 +32,7 @@ const onDemand = new Map();
  * Registers a builder for a view. Called once per opening, not per render of everything else.
  *
  * If that view is already the one on screen, it builds right away: the tabs are wired before the builders are known, so
- * arriving straight at a deep link — a bookmark, a reload, a link somebody sent — used to open the screen and leave it
+ * arriving straight at a deep link (a bookmark, a reload, a link somebody sent) used to open the screen and leave it
  * blank until the reader clicked away and back.
  */
 export function whenOpened(view, build) {

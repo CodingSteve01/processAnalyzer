@@ -29,7 +29,7 @@ CREATE INDEX ix_ocel_event_ts ON ocel.event (ts);
 CREATE INDEX ix_ocel_event_kind ON ocel.event (actor_kind);
 
 -- Ids are type-prefixed ('document:481203'). The OCEL primary key spans all object types, and bare numeric ids
--- from different tables collide the moment two of them share a number — which they do constantly.
+-- from different tables collide the moment two of them share a number, which they do constantly.
 CREATE TABLE ocel.object (
     id         text        PRIMARY KEY,
     type       text        NOT NULL,
