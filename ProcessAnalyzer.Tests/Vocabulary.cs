@@ -12,7 +12,7 @@ internal static class Vocabulary
     /// </summary>
     /// <remarks>
     /// The floor is the point of this method. An empty list satisfies every "nothing is missing" assertion, so a
-    /// mistyped path would look exactly like full coverage — the very failure a coverage test exists to rule out,
+    /// mistyped path would look exactly like full coverage: the very failure a coverage test exists to rule out,
     /// reappearing inside the test.
     /// </remarks>
     public static List<(string Kind, string Type)> ReadCatalogue(string directory)

@@ -130,7 +130,7 @@ $$;
 -- What counts as one activity.
 --
 -- The event type alone is not enough. Two approvals by two different roles are two steps of the process, not the
--- same step twice — and with the bare type they are indistinguishable, so every multi-role approval reads as 100%
+-- same step twice, and with the bare type they are indistinguishable, so every multi-role approval reads as 100%
 -- rework and every variant collapses into "granted → granted". The discriminating attribute is therefore part of
 -- the activity label, taken only from the allow-listed payload keys that actually name a step.
 CREATE OR REPLACE FUNCTION analytics.activity_of(p_type text, p_attrs jsonb)
@@ -172,7 +172,7 @@ CREATE UNIQUE INDEX ux_timeline ON analytics.object_timeline (object_id, event_i
 CREATE INDEX ix_timeline_type ON analytics.object_timeline (object_type, ts);
 CREATE INDEX ix_timeline_event ON analytics.object_timeline (event_type);
 
--- One row per object: its case. is_open matters — counting in-flight objects into a p95 drags it down and makes
+-- One row per object: its case. is_open matters: counting in-flight objects into a p95 drags it down and makes
 -- a process look faster the busier it gets.
 CREATE MATERIALIZED VIEW analytics.object_lifecycle AS
 SELECT

@@ -109,7 +109,7 @@ public sealed class ProjectionService
 
     /// <summary>
     /// Discards the derived model and rebuilds it from the mirror. The mirror is never touched, so this costs
-    /// nothing but local time — which is the whole point of keeping the raw journal as its own layer.
+    /// nothing but local time, which is the whole point of keeping the raw journal as its own layer.
     /// </summary>
     public async Task<int> RebuildAsync(CancellationToken ct)
     {
@@ -163,7 +163,7 @@ public sealed class ProjectionService
     /// <summary>
     /// The key that turns a performer id into a stable pseudonym. Rotating it re-pseudonymizes everything and
     /// breaks handover history continuity, so an unset key falls back to a fixed local value rather than a random
-    /// one — a random key per restart would silently split one person into many.
+    /// one: a random key per restart would silently split one person into many.
     /// </summary>
     private string ActorHashKey =>
         string.IsNullOrWhiteSpace(_options.ActorHashKey) ? "local-development-actor-key" : _options.ActorHashKey;

@@ -6,10 +6,10 @@
 -- a wall nobody reads.
 --
 -- So it renders by rule: the entity contributes a German singular noun, the verb a German word, and an entity added
--- later renders as soon as its noun is in the vocabulary — one row instead of four.
+-- later renders as soon as its noun is in the vocabulary: one row instead of four.
 --
 -- Singular deliberately, unlike the object labels: object labels are plural because screens count them
--- ("Vorgänge: 1.204"), but an activity reads as one thing happening once — "Vorgang geändert", never "Vorgänge
+-- ("Vorgänge: 1.204"), but an activity reads as one thing happening once: "Vorgang geändert", never "Vorgänge
 -- geändert".
 
 -- Rendering, in one place so no screen can print something else.

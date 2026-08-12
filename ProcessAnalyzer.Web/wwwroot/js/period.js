@@ -1,9 +1,9 @@
 // What every question is asked about: a window in time and, optionally, one group of people. One place, because a
-// filter that some panels honour and others ignore is worse than none — the reader compares two numbers on the same
+// filter that some panels honour and others ignore is worse than none: the reader compares two numbers on the same
 // screen and they answer different questions.
 //
 // Both scope whole CASES, not loose events. A case that began before the window, or whose other participants are not
-// in the chosen group, would otherwise show a truncated lifecycle — its first step would be whatever survived the
+// in the chosen group, would otherwise show a truncated lifecycle whose first step is whatever survived the
 // filter, and every duration derived from that is wrong rather than merely partial.
 
 const Presets = [
@@ -21,7 +21,7 @@ let steps = { has: null, hasLabel: null, without: null, withoutLabel: null };
 /**
  * What the case IS: one classification and, optionally, one of its values.
  *
- * A name without a value asks "classified at all", which is the question behind every coverage gap — so the value slot
+ * A name without a value asks "classified at all", which is the question behind every coverage gap, so the value slot
  * is genuinely optional rather than defaulting to the first option.
  */
 let property = { name: null, value: null };
@@ -75,7 +75,7 @@ export function activeFilters() {
   if (property.name) {
     chips.push({
       kind: 'property',
-      // Without a value the filter says "carries this classification at all", and the chip has to say so — otherwise
+      // Without a value the filter says "carries this classification at all", and the chip has to say so, otherwise
       // the reader takes it for a value filter and cannot explain the case count.
       label: property.value
         ? `${property.name}: ${property.value}`
@@ -132,7 +132,7 @@ function renderChips() {
  * Sets the window from somewhere else in the application, and tells everybody.
  *
  * A chart that cannot change the scope is a picture. Clicking a day, or dragging across three weeks, is the same act as
- * typing two dates — so it goes through the same state, the controls show it, and every panel follows.
+ * typing two dates, so it goes through the same state, the controls show it, and every panel follows.
  */
 export function setPeriod(from, until) {
   state = { preset: 'custom', from: from ?? '', until: until ?? '' };
@@ -313,7 +313,7 @@ async function loadProperties(select) {
  * Fills the value select for one classification, or empties and disables it for none.
  *
  * The case count travels with each value, because it is what tells a reader whether a value is the main path or an
- * exception — and because a value that covers four cases out of nine thousand should not look like a serious filter.
+ * exception, and because a value covering four cases out of nine thousand should not look like a serious filter.
  */
 function fillPropertyValues(select, name) {
   const nf = new Intl.NumberFormat('de-DE');

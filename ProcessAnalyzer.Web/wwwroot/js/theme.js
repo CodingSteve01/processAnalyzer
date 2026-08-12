@@ -1,6 +1,6 @@
 // Light or dark: the system decides, unless somebody says otherwise.
 //
-// Three states and not two. A plain toggle loses the connection to the system setting the moment it is touched once —
+// Three states and not two. A plain toggle loses the connection to the system setting the moment it is touched once,
 // the page then stays light through the evening because of a click that morning. So: follow the system, or override it,
 // and a way back to following.
 //

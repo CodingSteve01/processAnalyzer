@@ -10,7 +10,7 @@ namespace ProcessAnalyzer.Web.Migrations;
 
 /// <summary>
 /// Each process is measured by its own clock. Office hours for office work, round the clock for work that runs at
-/// night — against one office calendar every duration of an operational process came out as zero.
+/// night: against one office calendar every duration of an operational process came out as zero.
 /// </summary>
 [DbContext(typeof(AppDbContext))]
 [Migration("20260806150000_ProcessClock")]
@@ -21,7 +21,7 @@ public partial class ProcessClock : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder) =>
         // The column goes; the lifecycle view stays as it is. Reverting it would mean re-emitting the whole definition
-        // for a rollback nobody wants — and a view that reports business time under a column called duration_seconds is
+        // for a rollback nobody wants, and a view that reports business time under a column called duration_seconds is
         // still readable, which a missing column is not.
         migrationBuilder.Sql(
             """

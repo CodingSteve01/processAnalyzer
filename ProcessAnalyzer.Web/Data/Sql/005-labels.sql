@@ -1,7 +1,7 @@
 -- Plain German for everything a person reads.
 --
 -- A technical type is a stable key and a terrible label. Nobody should have to know that
--- 'x.document.release-granted.v1 [Accounting]' is "Beleg von der Buchhaltung freigegeben" — and if they do, the
+-- 'x.document.release-granted.v1 [Accounting]' is "Beleg von der Buchhaltung freigegeben", and if they do, the
 -- analysis stops being a tool for finding out how work flows and becomes a tool for people who already know.
 --
 -- The keys stay technical underneath: variants, comparisons and the OCEL export use the type, so renaming a label

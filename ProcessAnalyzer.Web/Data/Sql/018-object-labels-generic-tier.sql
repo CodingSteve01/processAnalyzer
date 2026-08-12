@@ -2,7 +2,7 @@
 --
 -- The activity side has rendered the generic tier by rule since 012-generic-acts.sql, but the object side did not:
 -- label_object looked at 'object' labels only. Those exist for the types that are declared as business objects, and
--- an entity that only ever appears through the generic tier is not one of them — so it came back as "⚠ <slug>" on
+-- an entity that only ever appears through the generic tier is not one of them, so it came back as "⚠ <slug>" on
 -- every screen that counts objects, while the very same entity read as proper German in the step it appeared in.
 --
 -- The first installation to run against a real journal showed exactly that: a time record edited through a legacy

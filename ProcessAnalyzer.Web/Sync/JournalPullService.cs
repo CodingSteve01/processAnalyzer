@@ -240,7 +240,7 @@ public sealed partial class JournalPullService : BackgroundService
     /// <summary>
     /// Accepts the contiguous prefix of the page, in id order, whose rows are older than the cutoff, and stops at
     /// the first row that is not.
-    /// Filtering the page instead — taking every settled row and skipping unsettled ones in the middle — would
+    /// Filtering the page instead, taking every settled row and skipping unsettled ones in the middle, would
     /// advance the watermark past ids whose rows had not committed when we read. Identity columns hand out ids
     /// before commit, so such a row surfaces afterwards below the watermark, where nothing ever reads again apart
     /// from the shallow gap sweep. It is then gone forever, no error is raised anywhere, and the dashboard looks

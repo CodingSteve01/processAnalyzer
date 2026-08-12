@@ -39,7 +39,7 @@ public static class AnalyticsEndpoints
         group.MapGet("/groups", (AnalyticsRepository repo, CancellationToken token) => repo.ActorGroupsAsync(token));
 
         // What a case IS, as opposed to what happened to it: its kind, its area, purchase or sale. The options for
-        // the property filter, with their coverage — a classification that only a handful of cases carry is a gap to
+        // the property filter, with their coverage: a classification that only a handful of cases carry is a gap to
         // report, not a filter to offer silently.
         group.MapGet("/properties", (AnalyticsRepository repo, CancellationToken token) => repo.PropertiesAsync(token));
 
@@ -69,7 +69,7 @@ public static class AnalyticsEndpoints
             }
         );
 
-        // Discovery: what exists at all. None of these take an object type — finding out which processes there are
+        // Discovery: what exists at all. None of these take an object type: finding out which processes there are
         // is the question that comes before choosing one.
         group.MapGet(
             "/discovery/processes",
@@ -216,7 +216,7 @@ public static class AnalyticsEndpoints
         group.MapGet("/discovery/coverage", (DiscoveryRepository repo, CancellationToken t) => repo.CoverageAsync(t));
         // Which process a step belongs to. Read once per screen so the combined pictures can be clicked into.
         group.MapGet("/discovery/step-home", (DiscoveryRepository repo, CancellationToken t) => repo.StepHomeAsync(t));
-        // The release ladder: which stages exist, who holds them, and in which order they are actually climbed.
+        // The release ladder, which stages exist, who holds them, and in which order they are actually climbed.
         group.MapGet(
             "/discovery/release-stages",
             (

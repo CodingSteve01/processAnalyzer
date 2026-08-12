@@ -7,7 +7,7 @@ namespace ProcessAnalyzer.Web.Endpoints;
 /// <para>
 /// The application does not run pm4py and must not: it is AGPL-3.0, it pulls in a scientific stack, and a mining
 /// run takes minutes. The two exchange files through a shared directory, so this endpoint only reports what is
-/// there and how old it is — a stale model is a normal state and has to be visible as one, not hidden behind a
+/// there and how old it is: a stale model is a normal state and has to be visible as one, not hidden behind a
 /// picture that looks current.
 /// </para>
 /// </summary>
@@ -17,7 +17,7 @@ public static class MiningEndpoints
 
     /// <summary>
     /// What may be read out of the artifact directory. A pattern rather than a fixed list, because the miner writes
-    /// one set of diagrams per process and their names come from the data — but still a pattern and not a path, since
+    /// one set of diagrams per process and their names come from the data, but still a pattern and not a path, since
     /// the directory is shared with another container and a path fragment would turn this into a file-read primitive.
     /// </summary>
     private static readonly System.Text.RegularExpressions.Regex ProcessModel = new(

@@ -4,7 +4,7 @@ namespace ProcessAnalyzer.Tests;
 
 /// <summary>
 /// An <see cref="IJournalSource"/> whose rows are handed to it as a list, so a test can build the
-/// exact situation it needs — a page whose middle row is inside the lag window, or a row that only
+/// exact situation it needs: a page whose middle row is inside the lag window, or a row that only
 /// becomes visible after the watermark has already passed its id.
 /// <para>
 /// The fake deliberately does NOT filter by the lag window. Applying the lag is the pull's job; a
@@ -31,7 +31,7 @@ public sealed class FakeJournalSource : IJournalSource
 
     public bool WriteCapable { get; set; }
 
-    /// <summary>Number of pages the pull asked for — asserts that MaxPagesPerRun is honoured.</summary>
+    /// <summary>Number of pages the pull asked for, asserting that MaxPagesPerRun is honoured.</summary>
     public int ReadEventsCalls { get; private set; }
 
     /// <summary>
@@ -136,7 +136,7 @@ public sealed class FakeJournalSource : IJournalSource
 
     /// <summary>
     /// Derived from the source id so the same row keeps the same event id when it is revealed later
-    /// — otherwise the gap sweep would treat a re-appearing row as a new event and hide the bug.
+    /// Otherwise the gap sweep would treat a re-appearing row as a new event and hide the bug.
     /// </summary>
     public static Guid EventIdFor(long id)
     {

@@ -87,7 +87,7 @@ public sealed class CaseRepository
     /// The whole business transaction around one case: its own steps plus those of everything it touches.
     /// </summary>
     /// <remarks>
-    /// An object-centric log has no single case, and that is its strength — an order, its tour, its papers and its
+    /// An object-centric log has no single case, and that is its strength: an order, its tour, its papers and its
     /// accounting rows each have a life of their own. But the question a person asks about an order is "what happened
     /// with this order", and the answer spans all of them: created, planned onto a tour, papers back from the driver,
     /// document filed, reconciled into accounting.
@@ -168,7 +168,7 @@ public sealed class CaseRepository
 
     /// <summary>
     /// The same headline figures, per week. Without this everything the tool says is a snapshot, and "did it get
-    /// better" — the question that follows every change — has no answer at all.
+    /// better", the question that follows every change, has no answer at all.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> TrendAsync(string objectType, Scope scope, CancellationToken ct) =>
         Query.RunAsync(

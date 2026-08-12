@@ -2,7 +2,7 @@
 //
 // A screen is where somebody follows a thought. Paper is where they take it to a meeting, and a process analysis that
 // cannot leave the browser stays an opinion of whoever was looking at it. So this collects the same figures the drill-
-// down shows, for the scope that is set, in the order somebody would present them — and prints through the browser
+// down shows, for the scope that is set, in the order somebody would present them, and prints through the browser
 // rather than through a rendering service, which keeps the tool self-contained and the output exactly what the reader
 // saw.
 //

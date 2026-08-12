@@ -10,7 +10,7 @@ namespace ProcessAnalyzer.Tests;
 /// The OCEL 2.0 export, checked against the constraints pm4py validates on import.
 /// </summary>
 /// <remarks>
-/// A missing key does not stop the file from loading — that is the danger. The first version of this exporter
+/// A missing key does not stop the file from loading: that is the danger. The first version of this exporter
 /// violated eight of the relational constraints and imported fine; a duplicated relation would have inflated every
 /// count computed from it, with nothing looking wrong. Running pm4py from a .NET test is not practical, so the
 /// constraints it checks are asserted here directly.
@@ -96,7 +96,7 @@ public sealed class OcelExportTests : IAsyncLifetime
         await ExportAsync();
 
         // The table suffix is derived from the label and sanitized, so the test asks the map table for it instead of
-        // hard-coding the result of that sanitizing — a rule change would otherwise break the test rather than the
+        // hard-coding the result of that sanitizing: a rule change would otherwise break the test rather than the
         // assertion it is making.
         var suffix = (await QueryAsync("SELECT ocel_type_map FROM event_map_type ORDER BY ocel_type LIMIT 1"))[0];
         var timestamps = await QueryAsync($"SELECT ocel_time FROM event_{suffix}");
@@ -126,7 +126,7 @@ public sealed class OcelExportTests : IAsyncLifetime
         return values;
     }
 
-    /// <summary>Two approvals of one document by two roles — the smallest log that can expose a collapsed activity.</summary>
+    /// <summary>Two approvals of one document by two roles: the smallest log that can expose a collapsed activity.</summary>
     private async Task SeedAsync()
     {
         await using var db = await _postgres.Factory.CreateDbContextAsync(CancellationToken.None);

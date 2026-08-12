@@ -3,7 +3,7 @@
 -- Filtering events by date would cut cases in half: a case that started before the window would show a truncated
 -- lifecycle, its first step would be whatever happened to fall inside, and every duration computed from it would be
 -- wrong rather than merely partial. So a case is in scope when it STARTED in the window, and then all of its events
--- are — which is also how the weekly trend has always grouped.
+-- are, which is also how the weekly trend has always grouped.
 --
 -- object_lifecycle already carries first_ts. The timeline did not, so every query over it would have needed a
 -- subquery against the lifecycle. One window function here instead: the predicate becomes identical everywhere, and

@@ -5,7 +5,7 @@ using Xunit;
 namespace ProcessAnalyzer.Tests;
 
 /// <summary>
-/// The rules that live in SQL — working time, activity labels, projection.
+/// The rules that live in SQL: working time, activity labels, projection.
 /// </summary>
 /// <remarks>
 /// These are the pieces where a mistake is invisible: a wrong calendar makes every duration wrong in the same
@@ -51,7 +51,7 @@ public sealed class AnalyticsSqlTests
         var seconds = await ScalarAsync("SELECT analytics.biz_seconds('2026-05-20 15:00+02', '2026-05-22 09:00+02')");
 
         // The same span as the first case, minus the Thursday. Read the holiday flags the wrong way round and this
-        // stays at ten hours — which is exactly what happened, and nothing about the result looked wrong.
+        // stays at ten hours, which is what happened, and nothing about the result looked wrong.
         Assert.Equal(2 * 3600, seconds, 1);
     }
 
@@ -97,7 +97,7 @@ public sealed class AnalyticsSqlTests
     [Fact]
     public async Task ObjectLabel_UsesTheEntityNounForTheGenericTier()
     {
-        // An entity that only ever appears through the generic tier has no 'object' label — nothing declares it as a
+        // An entity that only ever appears through the generic tier has no 'object' label, because nothing declares it as a
         // business object. It was still counted on the screens that count objects, and read there as "⚠ <slug>" while
         // the step it appeared in read as proper German.
         await ExecuteAsync(
@@ -135,7 +135,7 @@ public sealed class AnalyticsSqlTests
     public async Task VocabularyLoad_DoesNotOverwriteANameTypedInTheTool()
     {
         // A person named this type in the tool. The next startup reads the vocabulary file again, which carries the old
-        // word — and silently restoring it would undo somebody's work with nothing on screen to connect the two.
+        // word, and silently restoring it would undo somebody's work with nothing on screen to connect the two.
         await ExecuteAsync(
             "INSERT INTO ocel.label (kind, type_name, label_de, source, file_label_de) "
                 + "VALUES ('event', 'test.named.here.v1', 'Im Werkzeug benannt', 'ui', 'Aus der Datei') "
@@ -170,7 +170,7 @@ public sealed class AnalyticsSqlTests
 
         await ExecuteAsync("DELETE FROM ocel.label WHERE type_name = 'test.owned.by.file.v1'");
 
-        // A corrected word in the vocabulary still arrives — the protection is for typed names, not against the file.
+        // A corrected word in the vocabulary still arrives: the protection is for typed names, not against the file.
         Assert.Equal("Korrigierte Fassung", label);
     }
 
@@ -212,7 +212,7 @@ public sealed class AnalyticsSqlTests
     /// One person, two channels: confirmed from the truck and corrected at a desk.
     /// </summary>
     /// <remarks>
-    /// dim.actor_role carries one row per (key, kind), so this person has two — and every scalar subquery over it
+    /// dim.actor_role carries one row per (key, kind), so this person has two, and every scalar subquery over it
     /// raised 21000 the moment real data contained anyone who had done both. Every screen that names an actor went
     /// blank at once, which is how it was found. The human is the answer: the device is a channel, not a second
     /// person.

@@ -1,7 +1,7 @@
 // Following a thought instead of reading seven pages.
 //
 // Every other screen in this tool answers a question somebody has not asked yet. This one starts where a person starts
-// — which processes are there — and then lets them go in: a process, a step inside it, the cases that went through that
+// (which processes are there) and then lets them go in: a process, a step inside it, the cases that went through that
 // step, one of those cases, and from any step in that case back out to every case with the same step.
 //
 // The path lives in the URL, so the browser's back button works, a finding can be sent to somebody, and a reload lands
@@ -34,7 +34,7 @@ const moment = (value) => (value ? df.format(new Date(value)) : '—');
 /**
  * The rows of a response, or none.
  *
- * `request` answers with null when its request was superseded — switching tabs while a level is loading does that, and
+ * `request` answers with null when its request was superseded, which switching tabs during a load does, and
  * it is a normal event, not an error. Reading `.rows` off it threw and killed the render, which is how a routine race
  * turned into an empty page with a stack trace in the console.
  */
@@ -80,7 +80,7 @@ function goTo({ process = null, step = null, case: caseId = null, actor = null }
  * The miner's report, fetched once per screen.
  *
  * Two things on the process level need it: the picture and the mined findings. The fetch layer keys its aborts by route,
- * so two concurrent calls to the same route means the second cancels the first — and the loser resolves to null and
+ * so two concurrent calls to the same route mean the second cancels the first. The loser resolves to null and
  * quietly renders "for this process no diagram has been computed" while the file sits right there. Ask once, read twice.
  */
 let miningPromise = null;
@@ -187,7 +187,7 @@ async function renderProcesses() {
 
   if (rows.length) {
     // The mined pictures of everything at once, next to the drawn landscape. The drawn one answers "who gives whom work"
-    // and the mined ones answer "where do the processes touch the same step" — different questions, same level.
+    // and the mined ones answer "where do the processes touch the same step": different questions, same level.
     showLandscapeDiagrams();
 
     // The landscape is a picture like any other here, so it gets the same controls: zoom, reading size, full screen.
@@ -210,7 +210,7 @@ async function renderProcesses() {
  * The mined pictures of everything at once, on the level where everything at once is the subject.
  *
  * These used to be a page of their own, which is why they disappeared when that page did. Inlined and clickable like the
- * per-process ones, but against a map of every step and the process it belongs to — a box in here says "Beleg freigegeben"
+ * per-process ones, but against a map of every step and the process it belongs to. A box in here says "Beleg freigegeben"
  * and nothing about which process that is, and a picture a reader can see but not enter is the one dead end left.
  */
 async function showLandscapeDiagrams() {
@@ -433,7 +433,7 @@ async function renderProcess(process) {
  *
  * These used to be a page of their own with a process picker on top, which meant the same choice was made twice: once by
  * clicking a process here, once by picking it in a dropdown there, and the two could disagree. They belong to the
- * process, so they live under it — folded away, because a reader arrives with a question and not with a wish for
+ * process, so they live under it, folded away, because a reader arrives with a question and not with a wish for
  * eleven tables.
  */
 function detailBlock({
@@ -908,7 +908,7 @@ async function renderCase(process, step, caseId) {
 /**
  * Jump into the path from anywhere.
  *
- * The other screens name the same things — a process in the overview, a step in the analysis, a case in the case list —
+ * The other screens name the same things (a process in the overview, a step in the analysis, a case in the case list)
  * and every one of them was a dead end. Exported so those tables can hand over instead of duplicating the levels.
  */
 export function drillTo(target) {
@@ -994,7 +994,7 @@ async function showProcessDiagram(process, label) {
   // process to see it drawn differently and finding your way back afterwards.
   const renderings = [
     // First, because it is the only one that cannot be wrong about the process: box A was followed by box B this many
-    // times. Everything after it generalises — invents gateways, inserts silent steps, drops rare paths.
+    // times. Everything after it generalises: invents gateways, inserts silent steps, drops rare paths.
     ['flow', 'Fluss'],
     ['flowTime', 'Fluss nach Dauer'],
     ['main', 'Hauptpfade'],
@@ -1031,7 +1031,7 @@ async function showProcessDiagram(process, label) {
  * Draws one rendering into the box.
  *
  * Inlined rather than shown as an image, because an image cannot be clicked: the boxes carry the same German labels the
- * tables use — we generate both — so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
+ * tables use (we generate both) so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
  * no such labels on every node, and then the picture is simply a picture.
  */
 async function paintDiagram(model, process, label) {
@@ -1048,11 +1048,11 @@ async function paintDiagram(model, process, label) {
  *
  * The box is created once and only its contents are replaced afterwards. That is not a micro-optimisation: in the
  * preview the box has been MOVED into the overlay, so rebuilding the surrounding markup would create a second box in the
- * page while the reader keeps looking at the old one in front of them — switching renderings inside the preview did
+ * page while the reader keeps looking at the old one in front of them. Switching renderings inside the preview did
  * nothing at all. Same element, new picture, and the viewer that is attached to it keeps its state.
  *
  * Inlined rather than shown as an image, because an image cannot be clicked: the boxes carry the same German labels the
- * tables use — we generate both — so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
+ * tables use (we generate both) so each one can be matched back to a step and lead into it. A BPMN or a Petri net has
  * no such labels on every node, and then the picture is simply a picture.
  */
 async function paintInto(ids, model, title, wire) {
@@ -1089,14 +1089,14 @@ async function paintInto(ids, model, title, wire) {
  * Makes the boxes of a mined diagram lead somewhere.
  *
  * Graphviz writes one group per node with its text inside. The text is the label plus the count ("Beleg zugeordnet
- * E=335"), so the label is matched by prefix against the steps of this process — no id is available in the picture, and
+ * E=335"), so the label is matched by prefix against the steps of this process. No id is available in the picture, and
  * inventing one on the miner side would mean the two sides agreeing on a format forever.
  */
 function wireDiagram(process, boxId = 'drillDiagramBox', steps = null) {
   const box = $(boxId);
   if (!box) return false;
 
-  // Either the steps of the process on screen, or a map handed in — the combined pictures draw steps from every process
+  // Either the steps of the process on screen, or a map handed in: the combined pictures draw steps from every process
   // at once, and each of those has to lead into its own.
   const list =
     steps ??
@@ -1228,7 +1228,7 @@ function caseBar(steps) {
  *
  * The people screens answered "who works with whom" and "which role does which step" and then stopped. The question
  * after that is always the same and had nowhere to go: what does this person do. At the level of the step, never at the
- * level of the keystroke — this is a process tool and it stays one.
+ * level of the keystroke: this is a process tool and it stays one.
  */
 async function renderActor(actorKey) {
   const response = await request(
@@ -1295,7 +1295,7 @@ async function renderActor(actorKey) {
 /**
  * The whole transaction: this case and everything it touches, on one timeline.
  *
- * An object-centric log has no single case, and that is the right model — an order, its tour, its papers and its
+ * An object-centric log has no single case, and that is the right model: an order, its tour, its papers and its
  * accounting rows each have a life of their own. But the question somebody asks about an order is what happened with
  * this order, and the answer spans all of them. So the case keeps its own table below, and this is the sequence a person
  * would tell: created, planned onto a tour, papers back from the driver, filed, reconciled.
@@ -1341,8 +1341,8 @@ function chainSection(rows) {
  * Collects what this level could not show, as one line at the bottom.
  *
  * The alternative was a heading, an explanation and an empty box per missing thing, which is how a working tool starts to
- * read like a demo with placeholders. What is missing still has to be said — silence would leave the reader believing
- * they have seen everything — but it belongs in one quiet sentence, not in three holes in the middle of the page.
+ * read like a demo with placeholders. What is missing still has to be said, since silence would leave the reader
+ * believing they have seen everything, but it belongs in one quiet sentence rather than three holes in the page.
  */
 function noteGap(text) {
   const host = $('drillGaps');

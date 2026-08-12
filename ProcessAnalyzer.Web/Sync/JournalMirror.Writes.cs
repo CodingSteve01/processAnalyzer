@@ -25,7 +25,7 @@ public sealed partial class JournalMirror
     // as text and Postgres has no implicit text -> jsonb coercion, so an uncast insert fails outright.
     //
     // Derived, never written down. A hand-counted index silently moves the cast onto the neighbouring column the
-    // moment a column is added or removed — which is exactly what happened when causation_id was dropped, and the
+    // moment a column is added or removed, which is exactly what happened when causation_id was dropped, and the
     // failure surfaced as "column payload is of type jsonb but expression is of type text" three layers away.
     private static readonly int PayloadColumnIndex = Array.IndexOf(
         EventColumns.Split(',', StringSplitOptions.TrimEntries),

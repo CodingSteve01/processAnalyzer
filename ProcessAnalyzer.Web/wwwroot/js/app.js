@@ -211,7 +211,7 @@ initViews();
 initInsights();
 
 // The analysis is a dozen parallel requests fired the moment the page appears. Right after the login redirect the
-// first of them sometimes dies as "Failed to fetch" — the browser tearing down the previous page's connections —
+// first of them sometimes dies as "Failed to fetch", because the browser tears down the previous page's connections,
 // and the panels then stay blank with nothing on screen to explain it. One retry covers that; a second failure is
 // real and gets said out loud instead of leaving empty tables that look like "no data".
 (async function loadAnalysis() {

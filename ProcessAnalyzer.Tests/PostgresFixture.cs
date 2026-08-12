@@ -9,7 +9,7 @@ namespace ProcessAnalyzer.Tests;
 
 /// <summary>
 /// One PostgreSQL container for the whole collection. Starting a container per test class would
-/// add roughly a second each and buy nothing — the tests isolate themselves by truncating.
+/// add roughly a second each and buy nothing: the tests isolate themselves by truncating.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
@@ -41,7 +41,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         //
         // The examples, and only the examples: asserting a rendered German sentence needs known input, so these tests
         // must not depend on which vocabulary the machine happens to carry. Loading a second one would also break the
-        // rule that no two event types share a label — correctly, because two vocabularies describe two sources.
+        // rule that no two event types share a label, correctly, because two vocabularies describe two sources.
         // Whether an installation's own vocabulary is complete is a question about files, and LabelCoverageTests
         // answers it without a database.
         await new VocabularyLoader(

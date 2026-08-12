@@ -28,7 +28,7 @@ public sealed record Scope(
     string? PropertyValue = null
 )
 {
-    /// <summary>No filter at all — every case, everybody.</summary>
+    /// <summary>No filter at all: every case, everybody.</summary>
     public static Scope Everything { get; } = new(Period.All, null);
 
     /// <summary>Reads a scope off the query string. An empty or blank value is no filter, not a filter on "".</summary>

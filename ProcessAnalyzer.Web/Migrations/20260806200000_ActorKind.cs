@@ -12,7 +12,7 @@ namespace ProcessAnalyzer.Web.Migrations;
 /// A kind belongs to the actor, not to the event, and it can be corrected in the tool.
 /// </summary>
 /// <remarks>
-/// The log carries the kind per event, from the source's performer type — a channel, not an identity. Every person who
+/// The log carries the kind per event, from the source's performer type: a channel, not an identity. Every person who
 /// ever confirmed something from a tablet therefore arrived as two actors, dim.actor_role had two rows for them, and
 /// joining it to the event log counted their work twice: once under their group, once under "Gerät". That is where "43 %
 /// of all steps are done by the machine" came from, over a log holding 336 device events.

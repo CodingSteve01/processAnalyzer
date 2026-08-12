@@ -1,6 +1,6 @@
 -- Scoping a question to one group of people.
 --
--- The question this answers is "what does that part of the organisation actually do" — the warehouse, the drivers,
+-- The question this answers is "what does that part of the organisation actually do": the warehouse, the drivers,
 -- the office. Without it an installation where one group produces most of the events reads as if the whole company
 -- worked that way, and the smaller groups are invisible under the volume.
 --
@@ -10,7 +10,7 @@
 -- period filter scopes cases (see Period).
 --
 -- Membership comes from the source directory (dim.actor_group), so it is as current as the last directory sync.
--- Somebody who changed departments is counted where they are now — the alternative, membership as of the event, is
+-- Somebody who changed departments is counted where they are now: the alternative, membership as of the event, is
 -- not in the source.
 CREATE OR REPLACE FUNCTION analytics.case_touched_by_group(p_object_id text, p_group text)
 RETURNS boolean

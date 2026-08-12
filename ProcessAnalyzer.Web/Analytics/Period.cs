@@ -15,7 +15,7 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// <param name="Until">Exclusive upper bound on the case start, or <c>null</c>.</param>
 public sealed record Period(DateTimeOffset? From, DateTimeOffset? Until)
 {
-    /// <summary>No window — every case.</summary>
+    /// <summary>No window: every case.</summary>
     public static Period All { get; } = new(null, null);
 
     /// <summary>

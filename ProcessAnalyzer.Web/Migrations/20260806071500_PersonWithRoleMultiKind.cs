@@ -9,7 +9,7 @@ using ProcessAnalyzer.Web.Data;
 namespace ProcessAnalyzer.Web.Migrations;
 
 /// <summary>
-/// Naming an actor survives that actor having acted through more than one channel — the same person as a device and
+/// Naming an actor survives that actor having acted through more than one channel: the same person as a device and
 /// at a desk used to fail every screen that names anyone.
 /// </summary>
 [DbContext(typeof(AppDbContext))]

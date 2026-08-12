@@ -1,6 +1,6 @@
 -- One actor key, more than one kind. See the migration for why this is a separate file.
 
--- dim.actor_role is one row per (actor key, actor kind) — it reads the distinct pairs straight out of the event log.
+-- dim.actor_role is one row per (actor key, actor kind): it reads the distinct pairs straight out of the event log.
 -- A driver confirms a pickup from the truck and corrects it at a desk an hour later, so the same key arrives as
 -- 'device' and as 'human', and the key gets two rows. The scalar subqueries here assumed there could only ever be
 -- one, so every screen that names an actor failed with 21000 (more than one row returned by a subquery) as soon as a

@@ -14,7 +14,7 @@ using ProcessAnalyzer.Web.Vocabulary;
 // configuration; the password itself is stored nowhere.
 //
 // It refuses an empty or short password instead of hashing it. The first version did not, and a password piped in
-// from a script that never reached stdin produced a valid-looking hash of the empty string — a dashboard that opens
+// from a script that never reached stdin produced a valid-looking hash of the empty string: a dashboard that opens
 // for anybody who submits nothing, with no sign that anything went wrong.
 if (args is ["hash-password", ..])
 {
@@ -50,7 +50,7 @@ builder.Services.Configure<ProcessAnalyzerOptions>(
 
 // Second, eager binding of the same section: the pull service and the endpoints take the bare instance so
 // every component sees the values that were validated at startup. Nothing in phase 1 may change interval,
-// batch size or lag while a pull is in flight — a mid-run change would move the watermark rule under our feet.
+// batch size or lag while a pull is in flight: a mid-run change would move the watermark rule under our feet.
 var options =
     builder.Configuration.GetSection(ProcessAnalyzerOptions.SectionName).Get<ProcessAnalyzerOptions>()
     ?? new ProcessAnalyzerOptions();
@@ -69,7 +69,7 @@ builder.Services.AddDbContextFactory<AppDbContext>(cfg =>
     cfg.UseNpgsql(connectionString, npgsql => npgsql.CommandTimeout(120))
 );
 
-// The reader refuses to construct without a read-only connection string, which is right — but an unconfigured
+// The reader refuses to construct without a read-only connection string, which is right, but an unconfigured
 // sidecar still has to start, or the "no source configured" state the dashboard and /health report could never
 // actually be reached. The stand-in throws on every read instead of returning empty pages: an empty page looks
 // exactly like "nothing new in the journal", and that is how an unconfigured mirror would report itself healthy.
@@ -112,7 +112,7 @@ await using (var db = await app.Services.GetRequiredService<IDbContextFactory<Ap
 }
 
 // After the migrations: they create ocel.label, the loader only fills it. Configuration, so it is re-read on every
-// start — a corrected label must take effect by restarting the container, not by editing a table by hand.
+// start: a corrected label must take effect by restarting the container, not by editing a table by hand.
 await app.Services.GetRequiredService<VocabularyLoader>().LoadAsync(app.Lifetime.ApplicationStopping);
 
 if (!await EnsureSourceIsReadOnlyAsync(app, options, startupLog))
@@ -139,7 +139,7 @@ app.Use(
 );
 
 // BEFORE the static files, not after. Static files are served by their own middleware and never reach the
-// endpoints, so a check placed behind them hands out index.html to anybody who asks — which is exactly what the
+// endpoints, so a check placed behind them hands out index.html to anybody who asks, which is exactly what the
 // first version did: /api answered 401 and / answered 200. The login page and its two assets are on the open list.
 app.UseDashboardAuth(options);
 
@@ -150,7 +150,7 @@ app.UseStaticFiles(
         // Revalidate every asset on every load, and never serve one from cache without asking.
         //
         // This used to be max-age=3600. The markup carries no version in its asset URLs, so for an hour after an
-        // update a browser combined the new HTML with the previous JS — new buttons wired to code that did not
+        // update a browser combined the new HTML with the previous JS: new buttons wired to code that did not
         // contain their handlers yet, doing nothing at all when clicked, with nothing in the console to explain it.
         // A conditional request per asset costs a 304 on a local network; a UI whose halves disagree costs an hour of
         // looking for a bug that is not in the code.
@@ -166,7 +166,7 @@ app.UseStaticFiles(
 );
 
 // The identity switch lives in the database because SQL functions read it, but the container's environment is what
-// decides it — otherwise a value set once by hand would outlive the configuration that is supposed to govern it.
+// decides it: otherwise a value set once by hand would outlive the configuration that is supposed to govern it.
 await using (var identityScope = app.Services.CreateAsyncScope())
 {
     var factory = identityScope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();

@@ -63,7 +63,7 @@ GO
 
 -- Granted per table and only where the table exists: the journal is created by a migration that has not shipped
 -- yet, and an unconditional GRANT on a missing table aborts the whole script. Re-run this file after the deploy to
--- pick up whatever was still missing — every statement here is idempotent.
+-- pick up whatever was still missing: every statement here is idempotent.
 DECLARE @tables TABLE (name sysname);
 INSERT INTO @tables (name) VALUES
     -- the journal itself
@@ -103,7 +103,7 @@ GO
 -- ============================================================================================================
 -- This instance already governs itself: appPool (80/75) carries the application, biPool (10/20, low importance)
 -- carries reporting, and dbo.fn_RGClassifier in master routes by login and program name. The sidecar is reporting
--- workload, so it belongs in biPool — a third pool would only fragment a decision somebody already made.
+-- workload, so it belongs in biPool: a third pool would only fragment a decision somebody already made.
 --
 -- Run this section by hand, deliberately, and preferably off-peak. Two reasons:
 --   * The classifier cannot be altered while it is assigned. It has to be detached, changed and re-attached, and in

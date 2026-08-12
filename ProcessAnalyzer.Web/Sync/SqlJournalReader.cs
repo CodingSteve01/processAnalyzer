@@ -8,7 +8,7 @@ namespace ProcessAnalyzer.Web.Sync;
 // The read side against the source operational database. Raw ADO.NET, never EF: an EF model over a foreign schema
 // invites migrations, change tracking and lazy loading against a database this process must never write to.
 //
-// Every statement here is keyed on the clustered primary key dbo.BusinessEvents.Id — no SELECT *, no JOIN, no
+// Every statement here is keyed on the clustered primary key dbo.BusinessEvents.Id: no SELECT *, no JOIN, no
 // aggregate, no LIKE. That is not style, it is the price of admission: this reader runs against the live operational
 // database, so any read that turns into a scan or a hash join competes for the same memory grants and locks as order
 // processing. A seek on the clustered index costs the source system nothing measurable; anything else eventually does.
@@ -39,7 +39,7 @@ public sealed class SqlJournalReader : IJournalSource
     /// Reads the next page of events after <paramref name="afterId" />, ordered by Id.
     ///
     /// There is deliberately NO lag predicate in this SQL. Id is an IDENTITY value handed out at INSERT time, inside
-    /// the business transaction that produced the event — so a reader can see Id=1005 committed while Id=1003 is still
+    /// the business transaction that produced the event, so a reader can see Id=1005 committed while Id=1003 is still
     /// an open transaction. If this query filtered on RecordedAt, 1005 would pass the filter, the caller would advance
     /// the watermark past 1003, and 1003 would be lost forever with every counter still looking healthy. The lag rule
     /// therefore belongs to the caller, which walks the page and stops at the first row inside the lag window, keeping
@@ -65,8 +65,8 @@ public sealed class SqlJournalReader : IJournalSource
         return events;
     }
 
-    /// Reads the object rows for an explicit list of event ids. The list is explicit — never a JOIN back to
-    /// dbo.BusinessEvents — so the source only ever sees a bounded seek list, and so that events whose page the caller
+    /// Reads the object rows for an explicit list of event ids. The list is explicit: never a JOIN back to
+    /// dbo.BusinessEvents, so the source only ever sees a bounded seek list, and so that events whose page the caller
     /// held back never drag their objects along.
     /// <summary>
     /// Whether the source carries object classifications yet.
@@ -139,12 +139,12 @@ public sealed class SqlJournalReader : IJournalSource
 
     /// The left side of the gap sweep: every (Id, EventId) the source recorded in the given window, up to the id the
     /// mirror has already passed. The sweep exists because the contiguous-prefix rule is only as good as the lag
-    /// window — if a transaction stays open longer than the lag, its row is skipped and the loss is completely silent:
+    /// window: if a transaction stays open longer than the lag, its row is skipped and the loss is completely silent:
     /// no error, no retry, just a dashboard that under-counts. Comparing source keys against mirrored keys is the only
     /// thing that turns that into a number someone can see.
     ///
-    /// This is the one read not driven by the primary key. It stays bounded on both ends — a few days of RecordedAt
-    /// and a hard Id ceiling — so it can never degrade into a full-table scan of the journal.
+    /// This is the one read not driven by the primary key. It stays bounded on both ends: a few days of RecordedAt
+    /// and a hard Id ceiling, so it can never degrade into a full-table scan of the journal.
     public async Task<IReadOnlyList<SourceEventKey>> ReadKeysForSweepAsync(
         DateTime sinceUtc,
         long maxId,
@@ -214,7 +214,7 @@ public sealed class SqlJournalReader : IJournalSource
         var raw = await command.ExecuteScalarAsync(ct);
 
         // NULL means the login cannot even see the object, so the permission question has no answer. An unanswered
-        // question is not a clean bill of health — report write-capable and let the guard stop the boot.
+        // question is not a clean bill of health: report write-capable and let the guard stop the boot.
         if (raw is null || raw is DBNull)
         {
             _logger.LogWarning(
@@ -260,7 +260,7 @@ public sealed class SqlJournalReader : IJournalSource
         );
 
     // datetime2 carries no offset, so SqlClient hands the value back as DateTimeKind.Unspecified. Storing that into a
-    // Postgres timestamptz would reinterpret it in the server's local zone — a silent shift of every event time and
+    // Postgres timestamptz would reinterpret it in the server's local zone: a silent shift of every event time and
     // therefore of every duration this tool will later measure. The source columns are documented as UTC; say so here.
     private static DateTime ReadUtc(SqlDataReader r, int ordinal) =>
         DateTime.SpecifyKind(r.GetDateTime(ordinal), DateTimeKind.Utc);
@@ -307,7 +307,7 @@ public sealed class SqlJournalReader : IJournalSource
         return command;
     }
 
-    // The connection string is used exactly as configured — rewriting it here would hide whatever the operator
+    // The connection string is used exactly as configured: rewriting it here would hide whatever the operator
     // actually deployed. But ApplicationIntent=ReadOnly is not a preference: it is what routes this workload to a
     // readable secondary instead of the primary that serves dispatchers. Refuse to construct without it.
     private static void EnsureReadOnlyIntent(string connectionString)

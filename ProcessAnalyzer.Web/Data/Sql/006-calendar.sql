@@ -18,7 +18,7 @@ ALTER TABLE analytics.holiday ADD COLUMN IF NOT EXISTS source text NULL;
 -- Working seconds between two instants.
 --
 -- Each calendar day contributes at most its weekday's window, shortened by a holiday factor. The window is anchored
--- at analytics.business_slot.open_from and lasts as many hours as the weekday has — so "8 hours on Monday" from
+-- at analytics.business_slot.open_from and lasts as many hours as the weekday has, so "8 hours on Monday" from
 -- the source becomes 07:00-15:00 with the default start, and changing the start moves the window without changing its
 -- length.
 CREATE OR REPLACE FUNCTION analytics.biz_seconds(a timestamptz, b timestamptz)

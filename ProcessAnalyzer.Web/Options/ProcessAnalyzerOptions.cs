@@ -57,7 +57,7 @@ public sealed class ProcessAnalyzerOptions
     /// Off by default, because an installation that has not decided must not show names by accident. On, because
     /// "who approves whose leave" is a question an organisation is entitled to answer about itself, and a pseudonym
     /// cannot answer it. Either way the raw source id stays in dim.actor and no screen ranks people against
-    /// each other — the switch changes what a person is called, not what is measured.
+    /// each other: the switch changes what a person is called, not what is measured.
     /// </remarks>
     public bool ShowActorIdentity { get; set; }
 
@@ -69,13 +69,13 @@ public sealed class ProcessAnalyzerOptions
 
     /// <summary>
     /// Which worktime model to use. Empty takes the median across all current models, because no single one speaks
-    /// for everybody — and the screen says so rather than presenting a guess as a fact.
+    /// for everybody, and the screen says so rather than presenting a guess as a fact.
     /// </summary>
     public string WorktimeCalendarName { get; set; } = string.Empty;
 
     /// <summary>
-    /// When a working day begins. The one piece of the calendar a source usually does not record — it keeps hours per
-    /// weekday, not clock times — so it is configured here and stated on the screen rather than silently assumed.
+    /// When a working day begins. The one piece of the calendar a source usually does not record: it keeps hours per
+    /// weekday, not clock times, so it is configured here and stated on the screen rather than silently assumed.
     /// </summary>
     public string DayStartsAt { get; set; } = "07:00";
 

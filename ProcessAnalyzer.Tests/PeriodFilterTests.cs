@@ -9,7 +9,7 @@ namespace ProcessAnalyzer.Tests;
 /// </summary>
 /// <remarks>
 /// Two failures worth a test. A filter that quietly does nothing looks identical to a filter that works when the data
-/// happens to fit the window — and it would be believed. And a filter applied to events rather than cases truncates
+/// happens to fit the window, and it would be believed. And a filter applied to events rather than cases truncates
 /// every case that began earlier: its first step becomes whatever fell inside the window, so cycle time, rework and
 /// the variant list all come out wrong rather than merely partial.
 /// </remarks>
@@ -48,7 +48,7 @@ public sealed class PeriodFilterTests
     {
         await SeedTwoCasesAsync();
 
-        // doc:old runs from May into July. Asked without a window it must show both of its steps — the point of
+        // doc:old runs from May into July. Asked without a window it must show both of its steps: the point of
         // scoping by case start is that a case is whole or absent, never half.
         await using var db = await _postgres.Factory.CreateDbContextAsync(CancellationToken.None);
         var connection = (NpgsqlConnection)db.Database.GetDbConnection();
@@ -103,7 +103,7 @@ public sealed class PeriodFilterTests
         await using var db = await _postgres.Factory.CreateDbContextAsync(CancellationToken.None);
 
         // The mirror rows first: ocel.event references them, which is what keeps the derived model from outliving the
-        // facts it came from. The JSON goes in as a parameter — ExecuteSqlRaw reads braces as format placeholders.
+        // facts it came from. The JSON goes in as a parameter: ExecuteSqlRaw reads braces as format placeholders.
         await db.Database.ExecuteSqlRawAsync(
             """
             INSERT INTO journal.event (source_id, event_id, event_type, occurred_at, recorded_at, performer_type,

@@ -2,7 +2,7 @@
 //
 // It replaces a charting library loaded from a CDN. That dependency did not just add weight: with no route to the
 // internet the request never finished, it held one of the browser\'s six connections to this host, and the ten
-// analytical requests behind it waited forever. The page stayed blank with no error — the worst possible failure
+// analytical requests behind it waited forever. The page stayed blank with no error, the worst possible failure
 // for a tool whose whole job is to be trusted about what the data says.
 //
 // An internal tool has to work on a machine with no internet. Forty lines of SVG buy that outright.
