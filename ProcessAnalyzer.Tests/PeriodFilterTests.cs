@@ -25,7 +25,7 @@ public sealed class PeriodFilterTests
     {
         await SeedTwoCasesAsync();
 
-        // The old case starts in May, the recent one in July. A window from June must return the recent case only —
+        // The old case starts in May, the recent one in July. A window from June must return the recent case only,
         // and none of the old case's events, not even the ones that fall inside the window.
         var inWindow = await ObjectsInPeriodAsync("2026-06-01", null);
         Assert.Equal(["doc:new"], inWindow);
