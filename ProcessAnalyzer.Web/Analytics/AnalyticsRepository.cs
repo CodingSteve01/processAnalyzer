@@ -14,7 +14,7 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// <para>
 /// <b>Nothing here aggregates across object types.</b> An event that touches five objects counts five times when
 /// the log is flattened (convergence), and events of unrelated objects look sequential (divergence). A cross-type
-/// sum is therefore not a coarse answer, it is a wrong one — so <c>objectType</c> is required, not optional.
+/// sum is therefore not a coarse answer but a wrong one, so <c>objectType</c> is required, not optional.
 /// </para>
 /// </summary>
 public sealed class AnalyticsRepository
@@ -49,7 +49,7 @@ public sealed class AnalyticsRepository
     /// Which classifications exist, and how many cases carry each value.
     /// </summary>
     /// <remarks>
-    /// The list a reader picks a property filter from — and, read as a whole, the honest answer to "can we even see
+    /// The list a reader picks a property filter from and, read as a whole, the answer to "can we even see
     /// this distinction yet". A property that covers three per cent of its cases is not a filter, it is a coverage gap,
     /// and the share travels with the list so nobody has to find that out by filtering and getting an empty screen.
     /// <para>
@@ -72,7 +72,7 @@ public sealed class AnalyticsRepository
     /// </summary>
     /// <remarks>
     /// Scoped like everything else. It was not, and with a step filter set the headline said 717 cases while the figures
-    /// beside it counted 173 — the reader has no way to tell which of the two numbers answers their question.
+    /// beside it counted 173, and the reader cannot tell which number answers their question.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> InventoryAsync(Scope scope, CancellationToken ct) =>
         QueryAsync(
@@ -128,7 +128,7 @@ public sealed class AnalyticsRepository
 
     /// <summary>
     /// Throughput. Percentiles, never a mean: these distributions are lognormal with a fat tail, and the mean sits
-    /// where almost no case actually is. Open cases are excluded — counting them drags p95 down and makes a process
+    /// where almost no case actually is. Open cases are excluded: counting them drags p95 down and makes a process
     /// look faster the busier it gets.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> ThroughputAsync(
@@ -194,7 +194,7 @@ public sealed class AnalyticsRepository
 
     /// <summary>
     /// Rework: activities that happen more than once for the same object. The single most unambiguous waste signal
-    /// in an event log — nobody plans to approve the same document twice.
+    /// in an event log, because nobody plans to approve the same document twice.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> ReworkAsync(string objectType, Scope scope, CancellationToken ct) =>
         QueryAsync(
@@ -234,8 +234,8 @@ public sealed class AnalyticsRepository
     /// </summary>
     /// <remarks>
     /// Repeat-of-the-same-activity is only one shape of rework, and in this process it is the rarer one. The common
-    /// shape is a step that exists solely because something was wrong — a discarded release, a rejected request, a
-    /// failed declaration — after which the case loops back. Those cases carry the cost, so they are counted on
+    /// shape is a step that exists solely because something was wrong, such as a discarded release, a rejected
+    /// request or a failed declaration, after which the case loops back. Those cases carry the cost, so they are counted on
     /// their own rather than hidden inside the variant list.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> NegativeOutcomesAsync(
@@ -286,7 +286,7 @@ public sealed class AnalyticsRepository
 
     /// <summary>
     /// Variants: the distinct paths through the process, most frequent first. The cumulative share answers the
-    /// question that matters — how many different ways of doing this actually exist, and how much of the work runs
+    /// question that matters: how many different ways of doing this exist, and how much of the work runs
     /// on the standard path.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> VariantsAsync(
@@ -386,7 +386,7 @@ public sealed class AnalyticsRepository
     /// <remarks>
     /// The aggregates say where time goes on average. This says which single case went wrong, which is the question a
     /// dispatcher has. Per transition it takes the mean and the spread over all cases and reports the ones beyond three
-    /// standard deviations — the textbook line, and above it a case is not slow, it is different.
+    /// standard deviations, the textbook line: above it a case is not slow but different.
     /// <para>
     /// A transition needs at least twenty observations before it gets an opinion about what is normal. Below that the
     /// spread is noise and every second case looks like an outlier.
@@ -445,7 +445,7 @@ public sealed class AnalyticsRepository
     /// <remarks>
     /// Four eyes, checked against what happened rather than against what the configuration allows. Not an accusation:
     /// most of these are a small amount that nobody else was around for, and the rule may not even apply. But it is a
-    /// list somebody has to have seen, and it cannot be produced from the settings — only from the log.
+    /// list somebody has to have seen, and it can only be produced from the log, not from the settings.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> FourEyesAsync(Scope scope, CancellationToken ct) =>
         QueryAsync(
@@ -494,7 +494,7 @@ public sealed class AnalyticsRepository
     /// <remarks>
     /// The people screens answered "who works with whom" and "which role does which step" and stopped there. The
     /// question after that is always the same and had no screen: what does this person do all day. It reads at the level
-    /// of the step, not of the keystroke — this is a process tool, not a stopwatch on a person.
+    /// of the step, not of the keystroke: this is a process tool, not a stopwatch on a person.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> ActorProfileAsync(
         string actorKey,
@@ -631,7 +631,7 @@ public sealed class AnalyticsRepository
         );
 
     /// <summary>
-    /// Automation. The headline is straight-through processing — the share of cases with no human step at all —
+    /// Automation. The headline is straight-through processing, the share of cases with no human step at all,
     /// because a per-activity rate hides that almost every case still needs a person somewhere.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> AutomationAsync(
@@ -660,7 +660,7 @@ public sealed class AnalyticsRepository
 
     /// <summary>
     /// Automation candidates: frequent, manual, and predictable. The entropy term is what separates this from a
-    /// frequency chart — a step whose next step is always the same is mechanical, while a step with many possible
+    /// frequency chart: a step whose next step is always the same is mechanical, while a step with many possible
     /// outcomes is a judgement call, and automating a judgement call produces a support queue.
     /// </summary>
     public Task<List<Dictionary<string, object?>>> AutomationCandidatesAsync(

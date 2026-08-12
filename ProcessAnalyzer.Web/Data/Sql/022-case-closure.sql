@@ -1,20 +1,18 @@
 -- When is a case finished?
 --
--- Until now: when nothing happened to it for three days. That is a stopgap, and against a young mirror it is worse
--- than that — with eleven hours of data every case is open by definition, so throughput, percentiles, the trend and
--- the automation rate all report on an empty set. An order whose last step was "Rückmeldung übernommen" is finished as
--- far as the business is concerned and was still counted as in flight.
+-- Two rules, in this order:
 --
--- Two rules instead, in this order:
+--   1. The last step is an end step of that process. Then the case is done, whatever the clock says. This is how a
+--      process actually ends: something happens that nothing follows.
+--   2. Otherwise silence: no step for N hours means nobody is working on it any more. Still a heuristic, but only as
+--      the fallback, and configurable per process.
 --
---   1. The last step is an END STEP of that process. Then the case is done, whatever the clock says. This is how a
---      process actually ends: something happened that nothing follows.
---   2. Otherwise: silence. No step for N hours means nobody is working on it any more. Still a heuristic, but only
---      the fallback now, and configurable per process rather than three days for everything.
+-- Silence alone was the previous rule, and against a mirror younger than the threshold it leaves every case open, so
+-- throughput, percentiles, trend and automation rate all report on an empty set.
 --
 -- End steps are derived from the data and can be overridden. Derived, because a process nobody configured must still
--- work — that is the whole point of mining. Overridable, because the derivation can only see what has happened, and
--- somebody who knows the process knows an end step that has not occurred yet this week.
+-- work. Overridable, because the derivation only sees what has happened, and somebody who knows the process knows an
+-- end step that has not occurred yet this week.
 
 CREATE TABLE IF NOT EXISTS analytics.process_closure (
     object_type   text PRIMARY KEY,
@@ -30,9 +28,9 @@ COMMENT ON TABLE analytics.process_closure IS
 
 -- The steps that end a case, as the data has it.
 --
--- A step qualifies when it is the LAST step in at least four fifths of the cases it appears in. That is the shape of an
--- ending: it happens, and then nothing. A threshold rather than "never followed by anything", because one corrected
--- case would otherwise disqualify a step that ends a thousand others.
+-- A step qualifies when it is the last step in at least four fifths of the cases it appears in. A threshold rather
+-- than "never followed by anything", because one corrected case would otherwise disqualify a step that ends a
+-- thousand others.
 CREATE OR REPLACE VIEW analytics.derived_end_activity AS
 WITH per_step AS (
     SELECT t.object_type,
@@ -52,10 +50,9 @@ SELECT object_type,
        round(as_last_step::numeric / NULLIF(occurrences, 0), 3) AS share_as_last_step
 FROM per_step
 WHERE as_last_step::numeric / NULLIF(occurrences, 0) >= 0.8
-  -- And at least five occurrences. A step seen once is trivially "always last", and against a mirror that is a few
-  -- hours old that would declare half the vocabulary an ending and close cases that have barely started. Below the
-  -- threshold the silence rule decides, which errs towards "still running" — the safer error, because a case wrongly
-  -- counted as finished shortens every duration that includes it.
+  -- And at least five occurrences: a step seen once is trivially "always last", which against a young mirror would
+  -- declare half the vocabulary an ending. Below the threshold the silence rule decides, erring towards "still
+  -- running", because a case wrongly counted as finished shortens every duration that includes it.
   AND occurrences >= 5;
 
 /*

@@ -4,8 +4,8 @@
 -- calendar entries that can be half days. Neither is a clock window, so this keeps the shape the source actually has:
 -- a weekday contributes a number of hours, a holiday removes all or half of them.
 --
--- The one thing the source does not record is when a day starts. That stays configurable and is stated on the screen,
--- because pretending to know it would put a made-up number underneath every duration in the product.
+-- The source does not record when a day starts. That stays configurable and is stated on the screen, because
+-- guessing it would put a made-up number underneath every duration.
 
 ALTER TABLE analytics.business_slot ADD COLUMN IF NOT EXISTS hours numeric(5, 2) NOT NULL DEFAULT 10;
 ALTER TABLE analytics.business_slot ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'Standard 07-17';
@@ -49,9 +49,8 @@ SELECT (SELECT string_agg(
             ', ' ORDER BY dow)
         FROM analytics.business_slot)                                            AS arbeitszeit,
        (SELECT max(source) FROM analytics.business_slot)                         AS arbeitszeit_quelle,
-       -- Split by what they actually are. Counting "factor < 1" as half days lumped the full holidays in with
-       -- them and reported 122 of 122 days as halves, which is nonsense anybody would notice — and would have
-       -- discredited every duration on the screen next to it.
+       -- Split by what they are: counting "factor < 1" as a half day lumps the full holidays in with them and
+       -- reports every holiday as a half.
        (SELECT count(*) FROM analytics.holiday)                                  AS feiertage,
        (SELECT count(*) FROM analytics.holiday WHERE factor = 0)                 AS ganze_tage,
        (SELECT count(*) FROM analytics.holiday WHERE factor > 0 AND factor < 1)  AS davon_halbe_tage,
