@@ -9,13 +9,13 @@ namespace ProcessAnalyzer.Web.Endpoints;
 /// What a resource is, correctable from inside the tool.
 /// </summary>
 /// <remarks>
-/// The source says how an event arrived — as a user, as a device, as a scheduled job. That is the channel, and it is a
-/// fact. What it is not is an identity: the same account id arrives as both 'User' and 'Device' because a driver
-/// confirms from the tablet and corrects at the desk, and a technical account that posts through the API arrives as
-/// 'User' and looks like a person for the rest of the analysis.
+/// The source says how an event arrived: as a user, a device or a scheduled job. That is the channel, not an
+/// identity. The same account arrives as both 'User' and 'Device' when a driver confirms from the tablet and
+/// corrects at the desk, and a technical account posting through the API arrives as 'User' and is then counted as a
+/// person everywhere else.
 /// <para>
-/// Nothing in the log can settle that, because nothing in the log knows. Somebody in the company does, so they get a
-/// list and a control — the same arrangement as the vocabulary, for the same reason.
+/// Nothing in the log can settle that. Somebody in the company can, so they get a list and a control, the same
+/// arrangement as the vocabulary.
 /// </para>
 /// </remarks>
 public static class ActorEndpoints
@@ -26,8 +26,8 @@ public static class ActorEndpoints
     {
         var group = app.MapGroup("/api/actors");
 
-        // Everybody who ever did anything, busiest first, with what they are and where that came from. Enough that a
-        // reader can find the account they mean without scrolling: after fifty rows a list stops being read.
+        // Everybody who ever did anything, busiest first, with what they are and where that came from. Capped so the
+        // list stays readable: past fifty rows nobody reads it.
         group.MapGet(
             "/",
             async (IDbContextFactory<AppDbContext> factory, CancellationToken ct) =>
@@ -56,8 +56,8 @@ public static class ActorEndpoints
                 )
         );
 
-        // One correction. Refreshes what depends on it right away: marking an account as a bot changes the automation
-        // figures, and a figure that only changes at the next pull would look like the correction did nothing.
+        // One correction, refreshing what depends on it right away: marking an account as a bot changes the
+        // automation figures, and waiting for the next pull would look like the correction did nothing.
         group.MapPut(
             "/kind",
             async (IDbContextFactory<AppDbContext> factory, ActorKindEdit edit, CancellationToken ct) =>
