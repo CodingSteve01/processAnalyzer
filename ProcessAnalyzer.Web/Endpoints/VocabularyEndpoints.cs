@@ -9,13 +9,12 @@ namespace ProcessAnalyzer.Web.Endpoints;
 /// Naming things, from inside the tool.
 /// </summary>
 /// <remarks>
-/// The vocabulary arrives as files with the deployment, which is right for shipping a known source and wrong for the
-/// moment it matters: a step appears unnamed on a screen, the person looking at it knows the word, and without this
-/// the only way to write it down is a file on a server plus a restart. So the word gets lost and the screen keeps
-/// showing a dotted identifier behind a warning sign.
+/// The vocabulary ships as files with the deployment, which works for a known source but not for the moment it
+/// matters: a step appears unnamed, the person looking at it knows the word, and writing it down would take a file
+/// on a server and a restart. The word gets lost and the screen keeps showing a dotted identifier.
 /// <para>
-/// What is typed here wins over the file and survives a restart (see 021-labels-editable.sql). The file value is kept,
-/// so a correction can be taken back without hunting for what it used to say.
+/// What is typed here wins over the file and survives a restart (see 021-labels-editable.sql). The file value is
+/// kept, so a correction can be taken back without hunting for what it used to say.
 /// </para>
 /// </remarks>
 public static class VocabularyEndpoints
@@ -26,7 +25,7 @@ public static class VocabularyEndpoints
     {
         var group = app.MapGroup("/api/vocabulary");
 
-        // What is still unnamed, most frequent first — the order in which naming pays off.
+        // What is still unnamed, most frequent first, which is the order in which naming pays off.
         group.MapGet(
             "/gaps",
             async (IDbContextFactory<AppDbContext> factory, CancellationToken ct) =>

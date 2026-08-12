@@ -4,12 +4,11 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// What a question is asked about: a window in time and, optionally, one group of people.
 /// </summary>
 /// <remarks>
-/// One value rather than two parameters threaded separately. A panel that took the window but forgot the group would
-/// show a number the reader believes is filtered, and nothing fails when a filter is merely absent — the figure just
-/// answers a different question than the control above it claims.
+/// One value, not several parameters threaded separately: a caller that applies the window but forgets the group
+/// silently answers a different question, and a missing filter throws nothing.
 /// <para>
-/// Both dimensions scope whole CASES. Dropping single events instead would leave a case whose first step is whatever
-/// survived the filter, and every duration computed from that is wrong rather than partial.
+/// Every dimension scopes whole cases. Filtering single events would leave a case starting at whatever survived,
+/// making each duration computed from it wrong rather than partial.
 /// </para>
 /// </remarks>
 /// <param name="Period">The window on the case start.</param>
@@ -17,12 +16,9 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// <param name="HasStep">Only cases that went through this step at some point, or <c>null</c>.</param>
 /// <param name="WithoutStep">Only cases that never went through this step, or <c>null</c>.</param>
 /// <param name="Property">
-/// One classification of the case: its kind, its area, purchase or sale. Without it every document kind is
-/// the same process and every duration is an average over things that have nothing to do with each other.
+/// One classification of the case, such as its kind or area. Without it every document kind is the same process.
 /// </param>
-/// <param name="PropertyValue">
-/// Which value of it, or <c>null</c> for "classified at all" — the question behind every coverage gap.
-/// </param>
+/// <param name="PropertyValue">Which value of it, or <c>null</c> for "classified at all".</param>
 public sealed record Scope(
     Period Period,
     string? Group,

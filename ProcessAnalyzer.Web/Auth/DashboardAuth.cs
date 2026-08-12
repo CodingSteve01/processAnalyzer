@@ -10,14 +10,12 @@ namespace ProcessAnalyzer.Web.Auth;
 /// <summary>
 /// A password in front of the dashboard.
 /// <para>
-/// With names switched on, this tool shows who approves whose leave and who depends on whom. That is not something
-/// anybody who can reach the port should read, and "it is only on the internal network" has never been an access
-/// control. So there is a login.
+/// With names switched on, the tool shows who approves whose leave and who depends on whom. Reaching the port must
+/// not be enough to read that.
 /// </para>
 /// <para>
-/// One shared password, not a user directory. The tool has no per-person content and no roles of its own — every
-/// reader sees the same screens — so accounts would be management overhead that buys nothing. What it does buy is
-/// stated plainly in the README: this proves somebody knows the password, not who they are.
+/// One shared password, not a user directory: the tool has no per-person content and no roles, so every reader sees
+/// the same screens. This proves somebody knows the password, not who they are.
 /// </para>
 /// </summary>
 public static class DashboardAuth
@@ -47,9 +45,9 @@ public static class DashboardAuth
                     cookie.Cookie.Name = "pa.session";
                     cookie.Cookie.HttpOnly = true;
                     cookie.Cookie.SameSite = SameSiteMode.Strict;
-                    // Lax rather than Always: the tool is reached over plain http inside the network today, and
-                    // Always would hand out a cookie the browser then refuses to send back — a login that appears
-                    // to succeed and never sticks.
+                    // Lax, not Always: the tool is reached over plain http inside the network, and Always would hand
+                    // out a cookie the browser refuses to send back, so the login would appear to succeed and never
+                    // stick.
                     cookie.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
                     cookie.ExpireTimeSpan = TimeSpan.FromHours(12);
                     cookie.SlidingExpiration = true;
@@ -78,9 +76,8 @@ public static class DashboardAuth
     /// Requires a session for everything except the handful of paths that have to answer without one.
     /// </summary>
     /// <remarks>
-    /// Written as a plain middleware rather than per-endpoint attributes: a new endpoint added later is protected by
-    /// default. The opposite arrangement — public unless somebody remembers to lock it — is how analytical tools end
-    /// up with one forgotten open route.
+    /// A middleware rather than per-endpoint attributes, so an endpoint added later is protected by default. The
+    /// opposite arrangement, public unless somebody remembers to lock it, leaves one forgotten open route.
     /// </remarks>
     public static WebApplication UseDashboardAuth(this WebApplication app, ProcessAnalyzerOptions options)
     {

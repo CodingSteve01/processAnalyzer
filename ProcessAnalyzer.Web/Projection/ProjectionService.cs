@@ -8,14 +8,14 @@ namespace ProcessAnalyzer.Web.Projection;
 /// <summary>
 /// Derives the object-centric model from the mirror.
 /// <para>
-/// The work is one SQL function, called in batches. The rules are joins and CASE expressions, and keeping them in
-/// SQL means the thing that runs is the thing a reviewer reads — a row-by-row projector in C# would be slower and
-/// would put the rule two translations away from the data it describes.
+/// The work is one SQL function, called in batches. The rules are joins and CASE expressions, so keeping them in SQL
+/// means the thing that runs is the thing a reviewer reads. A row-by-row projector in C# would be slower and would
+/// put the rule two translations away from the data it describes.
 /// </para>
 /// <para>
-/// <b>Re-projection is free and deliberate.</b> Bumping <see cref="ProjectorVersion"/> makes every mirrored event
-/// pending again, so a changed rule is applied to the whole history without going near the source system. That is
-/// the reason the mirror exists as its own layer.
+/// Re-projection is free and deliberate: bumping <see cref="ProjectorVersion"/> makes every mirrored event pending
+/// again, applying a changed rule to the whole history without going near the source system. That is why the mirror
+/// exists as its own layer.
 /// </para>
 /// </summary>
 public sealed class ProjectionService
@@ -148,8 +148,8 @@ public sealed class ProjectionService
         // Order matters: the lifecycle measures durations in the clock of its process and decides whether a case is
         // finished from that process's end steps, and both of those are derived from the timeline. Refreshing the
         // lifecycle first would date it against the log it was built from.
-        // What the objects ARE, before anything groups by it. Idempotent and independent of the batch, so an interrupted
-        // run or a mirror that gained the column halfway through its history heals here rather than staying half-classified.
+        // What the objects are, before anything groups by it. Idempotent and independent of the batch, so an
+        // interrupted run or a mirror that gained the column mid-history corrects itself here.
         await db.Database.ExecuteSqlRawAsync("SELECT ocel.project_object_attributes()", ct);
         await db.Database.ExecuteSqlRawAsync("REFRESH MATERIALIZED VIEW analytics.object_timeline", ct);
         // Who the actors are, before anything asks whether a person was involved. The lifecycle reads it through

@@ -1,18 +1,16 @@
--- What a case IS, next to what happened to it.
+-- What a case is, next to what happened to it.
 --
--- Everything in this store so far describes events: what happened, when, by whom, to which object. Nothing describes the
--- object itself. So every document kind the source knows is one and the same process, a million documents are one case
--- type, and a posted purchase invoice cannot be told apart from a posted sales credit memo.
--- That is not a missing detail — it is the reason the real processes are invisible: the analysis can only group by what it
--- can see, and a distinction it cannot see becomes an average.
+-- Everything else in this store describes events. Nothing described the object, so every document kind was the same
+-- process and a posted purchase invoice could not be told from a posted sales credit memo. The analysis can only group
+-- by what it can see, and a distinction it cannot see becomes an average.
 --
--- The source now states these classifications on the object reference itself (journal.event_object.attributes), because
--- they belong to the object and do not change when a step happens. Mirrored 1:1 like everything else in journal.*, then
--- projected into a form the analysis can filter and group by.
+-- The source states these classifications on the object reference (journal.event_object.attributes) because they belong
+-- to the object and do not change when a step happens. Mirrored 1:1 like everything else in journal.*, then projected
+-- into a form the analysis can filter and group by.
 --
--- OCEL 2.0 models object attributes as values over time. Here the last value wins instead: these are classifications, not
--- measurements, and a document kind that changes is a correction rather than a history worth keeping. Keeping every version
--- would turn one lookup into a windowed query in every panel that groups by a property.
+-- OCEL 2.0 models object attributes as values over time; here the last value wins. These are classifications, not
+-- measurements, so a changed document kind is a correction rather than a history. Keeping every version would turn one
+-- lookup into a windowed query in every panel that groups by a property.
 
 ALTER TABLE journal.event_object ADD COLUMN IF NOT EXISTS attributes jsonb;
 

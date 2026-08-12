@@ -8,14 +8,14 @@ namespace ProcessAnalyzer.Web.Export;
 /// <summary>
 /// Writes the projected log as an OCEL 2.0 SQLite file, the format pm4py reads natively.
 /// <para>
-/// SQLite rather than JSON: the JSON form has to be held in memory as one document, and pm4py's SQLite importer
-/// reads the same log without materializing it. For a log that grows with the company, that difference decides
-/// whether the miner runs at all.
+/// SQLite, not JSON: the JSON form has to be held in memory as one document, while pm4py's SQLite importer reads
+/// the same log without materializing it. For a log that grows with the company, that decides whether the miner
+/// runs at all.
 /// </para>
 /// <para>
 /// The layout follows the OCEL 2.0 relational schema: a per-type table for events and objects, the two map tables
-/// that name them, and the relation tables. The map tables are authoritative for the table suffix — the importer
-/// reads the suffix from there and never guesses, so a type whose name is not a legal identifier still round-trips.
+/// that name them, and the relation tables. The map tables are authoritative for the table suffix, so a type whose
+/// name is not a legal identifier still round-trips.
 /// </para>
 /// </summary>
 public sealed class OcelSqliteExporter
@@ -52,9 +52,9 @@ public sealed class OcelSqliteExporter
 
         CreateCoreTables(target);
 
-        // Exported under their German names, because the export exists to be drawn. A diagram box labelled
-        // 'personnel.employee.received-from-external.v1' is unreadable for the people the analysis is for, and the
-        // export is a presentation artifact — the technical key stays the key inside Postgres, where identity matters.
+        // Exported under their German names: the export exists to be drawn, and a diagram box labelled
+        // 'personnel.employee.received-from-external.v1' is unreadable for its audience. The technical key stays the
+        // key inside Postgres, where identity matters.
         var eventTypes = await ReadTypesAsync(source, EventTypeQuery, ct);
         var objectTypes = await ReadTypesAsync(source, ObjectTypeQuery, ct);
 

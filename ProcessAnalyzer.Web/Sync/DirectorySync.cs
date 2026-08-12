@@ -10,15 +10,16 @@ using ProcessAnalyzer.Web.Options;
 namespace ProcessAnalyzer.Web.Sync;
 
 /// <summary>
-/// Pulls the user directory — who exists and which groups they belong to — and stores it as the actor dimension.
+/// Pulls the user directory, meaning who exists and which groups they belong to, and stores it as the actor
+/// dimension.
 /// <para>
-/// This is master data, not events: it is read whole and replaced, because a membership that was removed must
-/// disappear rather than linger. Small enough that incremental syncing would be more machinery than it saves.
+/// Master data, not events: read whole and replaced, so a removed membership disappears instead of lingering. Small
+/// enough that incremental syncing would cost more machinery than it saves.
 /// </para>
 /// <para>
-/// The pseudonym is computed here with the same key the projection uses, so <c>ocel.*</c> can be joined to a role
-/// without the raw user id ever leaving <c>dim.actor</c>. That is the whole point: the analysis speaks in roles, the
-/// mapping to a person exists in one table, and no endpoint reads it.
+/// The pseudonym is computed here with the same key the projection uses, so <c>ocel.*</c> joins to a role without
+/// the raw user id leaving <c>dim.actor</c>. The analysis speaks in roles, the mapping to a person lives in one
+/// table, and no endpoint reads it.
 /// </para>
 /// </summary>
 public sealed class DirectorySync
@@ -66,11 +67,11 @@ public sealed class DirectorySync
         var users = new List<(string, string?, bool)>();
         await using (var command = connection.CreateCommand())
         {
-            // dbo.AspNetUsers, not dbo.Users: the source keeps its people in the Identity table, and there is no
-            // DisplayName column — the name is assembled from FirstName and Surname, falling back to the login when
-            // both are empty, so an actor never renders as a blank cell.
-            // Blocked and LeaveDate come along: somebody who left the company still appears in every group they were
-            // ever in, and counting them as present turns "six people do this work" into a number nobody recognises.
+            // dbo.AspNetUsers, not dbo.Users: the source keeps its people in the Identity table. There is no
+            // DisplayName column, so the name is assembled from FirstName and Surname and falls back to the login,
+            // which keeps an actor from rendering as a blank cell.
+            // Blocked and LeaveDate come along because somebody who left still appears in every group they were ever
+            // in, and counting them as present turns "six people do this work" into a number nobody recognises.
             command.CommandText = """
                 SELECT u.Id,
                        NULLIF(LTRIM(RTRIM(CONCAT(u.FirstName, ' ', u.Surname))), '') AS DisplayName,
@@ -121,8 +122,8 @@ public sealed class DirectorySync
         await connection.OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
-        // Replace wholesale, inside one transaction: a removed membership has to disappear, and a half-written
-        // directory would silently reassign people to the wrong department for as long as it lasted.
+        // Replace wholesale inside one transaction: a removed membership has to disappear, and a half-written
+        // directory would reassign people to the wrong department for as long as it lasted.
         await ExecuteAsync(connection, "TRUNCATE dim.actor CASCADE", ct);
 
         var keys = new Dictionary<string, string>(StringComparer.Ordinal);
