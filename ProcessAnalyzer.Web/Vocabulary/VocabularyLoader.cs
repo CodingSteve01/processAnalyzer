@@ -7,18 +7,18 @@ using ProcessAnalyzer.Web.Options;
 namespace ProcessAnalyzer.Web.Vocabulary;
 
 /// <summary>
-/// Loads the installation's vocabulary — the German label of every type, which attribute names a step, and the
-/// payload attributes the source carries — into <c>ocel.label</c>, <c>ocel.discriminator_rule</c> and
-/// <c>ocel.payload_allowlist</c>.
+/// Loads the installation's vocabulary into <c>ocel.label</c>, <c>ocel.discriminator_rule</c> and
+/// <c>ocel.payload_allowlist</c>: the German label of every type, which attribute names a step, and the payload
+/// attributes the source carries.
 /// </summary>
 /// <remarks>
-/// Which types exist and what each one is called is a property of the installation, not of the tool: two sources
-/// declare different types, and the same type is called different things by two organisations. So the rendering
-/// rules stay in SQL — <c>analytics.label_activity</c> and friends — and the wording arrives from
-/// <see cref="ProcessAnalyzerOptions.VocabularyPath"/>, where it can be corrected without a release.
+/// Which types exist and what they are called belongs to the installation, not the tool: two sources declare
+/// different types, and two organisations name the same type differently. The rendering rules therefore stay in SQL
+/// (<c>analytics.label_activity</c> and friends) while the wording arrives from
+/// <see cref="ProcessAnalyzerOptions.VocabularyPath"/> and can be corrected without a release.
 ///
-/// Upsert rather than replace: an installation that ran the older migrations already holds these rows, and a load
-/// that deleted first would blank every screen for as long as it took to notice a missing file.
+/// Upsert, not replace: an installation that ran the older migrations already holds these rows, and deleting first
+/// would blank every screen until somebody noticed the missing file.
 /// </remarks>
 public sealed class VocabularyLoader
 {
@@ -42,8 +42,8 @@ public sealed class VocabularyLoader
         var directory = _options.VocabularyPath;
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
         {
-            // Not fatal, and not silent either. Without labels every screen renders dotted identifiers behind a ⚠,
-            // which is a state an operator has to be able to recognise from the log rather than from the dashboard.
+            // Not fatal, but not silent: without labels every screen renders dotted identifiers behind a warning
+            // sign, and an operator has to be able to recognise that state from the log.
             _log.LogWarning(
                 "No vocabulary directory at '{Directory}' — labels stay as they are in the database. A fresh "
                     + "installation will render technical type names until labels.tsv is provided.",
@@ -132,8 +132,8 @@ public sealed class VocabularyLoader
             command.Parameters.AddWithValue("kind", fields[0]);
             command.Parameters.AddWithValue("type", fields[1]);
             command.Parameters.AddWithValue("label", fields[2]);
-            // An empty fourth column means "the label is the whole story", which is a NULL hint and not an empty
-            // sentence — the screens test the hint for null to decide whether to render the explanation at all.
+            // An empty fourth column is a NULL hint, not an empty sentence: the screens test the hint for null to
+            // decide whether to render the explanation at all.
             command.Parameters.Add(
                 new NpgsqlParameter("hint", NpgsqlDbType.Text)
                 {

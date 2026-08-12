@@ -4,12 +4,11 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// The window a question is asked about.
 /// </summary>
 /// <remarks>
-/// Scopes whole cases: a case counts when it STARTED inside the window, and then all of its events do. Filtering
-/// events by date instead would truncate cases that began earlier — their first step would be whatever happened to
-/// fall inside the window, and every duration computed from that is wrong rather than partial.
+/// Scopes whole cases: a case counts when it started inside the window, and then all of its events do. Filtering
+/// events by date would truncate cases that began earlier, making every duration computed from them wrong rather
+/// than partial.
 /// <para>
-/// Both bounds are optional and an absent bound is not a sentinel date but a real absence: the predicate below tests
-/// for NULL, so an unfiltered request produces the same plan it always did.
+/// An absent bound is NULL, not a sentinel date, so an unfiltered request keeps the same query plan.
 /// </para>
 /// </remarks>
 /// <param name="From">Inclusive lower bound on the case start, or <c>null</c>.</param>
@@ -23,9 +22,8 @@ public sealed record Period(DateTimeOffset? From, DateTimeOffset? Until)
     /// Reads a period off the query string, tolerating an absent or unparsable bound rather than failing.
     /// </summary>
     /// <remarks>
-    /// A malformed date silently widening the window is the lesser evil here: the alternative is a 400 on a dashboard
-    /// that has no way to show it, and the reader would see an empty page with no reason given. The rendered header
-    /// states the window that was actually applied.
+    /// A malformed date widens the window instead of failing: the dashboard cannot render a 400, so the reader would
+    /// get an empty page with no reason. The header states the window that was actually applied.
     /// </remarks>
     public static Period FromQuery(string? from, string? until) => new(Parse(from), Parse(until));
 
