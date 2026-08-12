@@ -1,22 +1,15 @@
--- What a resource IS, as opposed to the channel one of its events came through.
+-- What a resource is, as opposed to the channel one of its events came through.
 --
--- The log carries a kind per EVENT, straight from the source's performer type. That is a fact about the channel: a
--- driver confirms a pickup from the tablet ('device') and corrects it at a desk an hour later ('human'), and both
--- events carry the same pseudonym because the source sends the same account id for both. Every one of the 70 people who
--- ever touched a tablet arrived with two kinds.
+-- The log carries a kind per event, straight from the source's performer type. That describes the channel, not the
+-- actor: a driver confirms a pickup from the tablet ('device') and corrects it at a desk an hour later ('human'), and
+-- both events carry the same pseudonym because the source sends the same account id.
 --
--- Three things went wrong from treating that pair as an identity:
+-- Treating the pair as an identity breaks three things. One row per (actor, kind) multiplies any join to the event log.
+-- "Manual work" becomes "the channel was human", so a driver photographing a delivery note counts as automation. And a
+-- technical account posting through the API arrives as 'User' and inflates manual work the other way.
 --
---   * dim.actor_role had one row per (actor, kind), so joining it to the event log multiplied. Every event of those 70
---     people was counted twice — once under their group and once under "Gerät" — and the roles table reported 17 420
---     steps for devices where the log holds 336. "43 % of all steps are done by the machine" was that double count.
---   * "manual work" was "the channel was human", so a driver photographing a delivery note counted as automation.
---     Photographing a note is the most manual work there is.
---   * A technical account that posts through the API arrives as 'User' and inflates manual work in the other
---     direction, and nothing in the tool could say otherwise.
---
--- So: the kind is derived per ACTOR (one row, human wins over any channel it acted through), it can be corrected in the
--- tool, and "was a person involved" becomes a question about the actor.
+-- So the kind is derived per actor, one row, human winning over any channel it acted through. It can be corrected in
+-- the tool, and "was a person involved" is a question about the actor.
 
 -- The correction, maintained on the Menschen screen. Small, hand-edited, and the only hand-written row in dim.
 CREATE TABLE IF NOT EXISTS dim.actor_kind_override (

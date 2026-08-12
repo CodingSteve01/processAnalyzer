@@ -37,7 +37,10 @@ appsettings.*.json
 /vocabulary/
 
 # Node
+# Both forms: the trailing slash matches a directory only, so a node_modules
+# symlink (what a git worktree needs to run the hooks) would still be tracked.
 node_modules/
+node_modules
 
 # OS files
 .DS_Store

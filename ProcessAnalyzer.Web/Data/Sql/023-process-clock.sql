@@ -1,13 +1,11 @@
 -- Which clock a process is measured by.
 --
--- Every duration in this tool was working time against one calendar: the office hours read from the source. For an
--- office process that is right, and for anything else it is a machine for producing zeros. The first real log made that
--- obvious: 98 % of the elapsed time of an order lies outside the office calendar, because the work happens at night —
--- so the median, the 80th and the 95th percentile all came out as "0.0 h" and the whole page said nothing.
+-- Measuring every duration against the office calendar only works for office processes. Where the work happens at
+-- night, nearly all elapsed time falls outside that calendar and every percentile comes out as 0.0 h.
 --
 -- A process therefore carries its own clock:
---   business hours — the office calendar. Waiting on a person, and a night is not waiting.
---   round the clock — the process runs when the work runs. A night IS the duration.
+--   business hours   the office calendar. Waiting on a person, and a night is not waiting.
+--   round the clock  the process runs when the work runs. A night is the duration.
 --
 -- Derived by default, because nobody should have to configure a process for it to be readable, and overridable per
 -- process, because the derivation only sees what has happened so far.
@@ -20,7 +18,7 @@ COMMENT ON COLUMN analytics.process_closure.use_business_hours IS
 
 -- The clock a process gets when nobody configured one: round the clock as soon as most of its elapsed time falls
 -- outside the office calendar. Half is the line, because a process split evenly between day and night is an office
--- process with overtime, while one at 98 % is simply not an office process.
+-- process with overtime.
 CREATE OR REPLACE VIEW analytics.process_clock AS
 -- Read from the timeline, not from the lifecycle: the lifecycle measures in the clock this view decides, and a view
 -- cannot depend on what depends on it.
@@ -86,8 +84,8 @@ SELECT
     MIN(t.ts) AS first_ts,
     MAX(t.ts) AS last_ts,
     COUNT(*) AS n_events,
-    -- Both are kept: the duration a screen reports, and the two raw measures it was derived from. Without them nobody
-    -- can check which clock produced a number, and "your durations are wrong" would be unanswerable.
+    -- Both are kept: the duration a screen reports, and the two raw measures behind it. Without them nobody can check
+    -- which clock produced a number.
     analytics.duration_seconds(t.object_type, MIN(t.ts), MAX(t.ts)) AS duration_seconds,
     analytics.biz_seconds(MIN(t.ts), MAX(t.ts)) AS biz_seconds,
     EXTRACT(EPOCH FROM (MAX(t.ts) - MIN(t.ts))) AS wall_seconds,

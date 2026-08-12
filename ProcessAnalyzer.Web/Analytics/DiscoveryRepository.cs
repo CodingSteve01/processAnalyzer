@@ -6,9 +6,9 @@ namespace ProcessAnalyzer.Web.Analytics;
 /// <summary>
 /// The questions somebody asks who does not yet know what the company does.
 /// <para>
-/// The rest of the analytics answers "how does this process perform". These answer the prior question — which
-/// processes are there at all, who runs them, what starts them and what comes out — and they answer it in words,
-/// with no type keys, no ids and no pseudonyms anywhere in the output.
+/// The rest of the analytics answers "how does this process perform". These answer the prior question: which
+/// processes exist at all, who runs them, what starts them and what comes out. They answer it in words, with no
+/// type keys, ids or pseudonyms in the output.
 /// </para>
 /// </summary>
 public sealed class DiscoveryRepository
@@ -23,8 +23,8 @@ public sealed class DiscoveryRepository
     /// </summary>
     /// <remarks>
     /// One row per object type, because in an object-centric log that is what a process is: a kind of thing that has
-    /// a life. Nothing has to be configured for this to work — a new object type appears here the moment the first
-    /// fact mentions it, which is the entire reason for mining rather than modelling.
+    /// a life. Nothing has to be configured: a new object type appears here the moment the first fact mentions it,
+    /// which is the reason for mining rather than modelling.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> ProcessesAsync(Scope scope, CancellationToken ct) =>
         Query.RunAsync(
@@ -104,8 +104,8 @@ public sealed class DiscoveryRepository
     /// Who decides about whose work: the person who started a case, and the person who approved or released it.
     /// </summary>
     /// <remarks>
-    /// The question this answers — "who approves whose leave, and whose times" — is one an organisation is expected
-    /// to know and frequently does not, because the answer lives in whoever happened to click. It is a relationship,
+    /// The question this answers, "who approves whose leave, and whose times", is one an organisation is expected to
+    /// know and often does not, because the answer lives in whoever happened to click. It is a relationship,
     /// not a performance measure: it says who depends on whom, and nothing about how well anybody works.
     /// <para>
     /// No k-anonymity floor here. A supervisor-to-employee relation is a pair by nature; suppressing pairs below five
@@ -184,7 +184,7 @@ public sealed class DiscoveryRepository
     /// Who works with whom: pairs of people who touch the same case, however far apart in the flow.
     /// </summary>
     /// <remarks>
-    /// The handover matrix only shows direct passes. Real dependencies are wider — two people can never hand over to
+    /// The handover matrix only shows direct passes. Real dependencies are wider: two people can never hand over to
     /// each other and still be unable to finish without one another. This is the pairing that shows that.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> CollaborationAsync(Scope scope, CancellationToken ct) =>
@@ -223,7 +223,7 @@ public sealed class DiscoveryRepository
             scope.Parameters()
         );
 
-    /// <summary>What the durations are measured against — the calendar, in words.</summary>
+    /// <summary>What the durations are measured against: the calendar, in words.</summary>
     /// <remarks>
     /// Shown on the screen because a calendar nobody can see is a number nobody can check. Every duration in this
     /// tool is working time, so if the calendar is wrong, every figure is wrong in the same direction and nothing
@@ -272,7 +272,7 @@ public sealed class DiscoveryRepository
 
     /// <summary>Who does what: every step, and the role that performs it most.</summary>
     /// <remarks>
-    /// This is the answer to "which workflows are executed by which people" — at the level of the group, which is
+    /// This is the answer to "which workflows are executed by which people", at the level of the group, which is
     /// both the useful level and the only one this system reports at.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> WhoDoesWhatAsync(Scope scope, CancellationToken ct) =>
@@ -321,7 +321,7 @@ public sealed class DiscoveryRepository
     /// What comes in and what goes out: the facts where something crosses the company boundary.
     /// </summary>
     /// <remarks>
-    /// Handovers are the events that make a process start or finish somewhere else — data arriving from a leading
+    /// Handovers are the events that make a process start or finish somewhere else: data arriving from a leading
     /// system, a document leaving by mail, a declaration to an authority. They are the outline of the company's
     /// dealings with the outside, and they are recorded precisely because a read is not one.
     /// </remarks>
@@ -386,7 +386,7 @@ public sealed class DiscoveryRepository
     /// <remarks>
     /// The mined pictures answer how one process runs, and the combined one is a wall of crossing edges. Neither answers
     /// the question somebody asks first: what does this company do end to end. That answer is in the log and needs no
-    /// mining — an event that touches two kinds of object IS the handover between them, and there are thousands of them.
+    /// mining, because an event touching two kinds of object is itself the handover between them.
     /// <para>
     /// The direction comes from which of the two cases started earlier, decided per shared event and then by majority. A
     /// tour created after the order it carries is downstream of it, however the two are wired in the database. Near ties
@@ -470,7 +470,7 @@ public sealed class DiscoveryRepository
             scope.Parameters()
         );
 
-    /// <summary>Which release stage follows which — the ladder as it is actually climbed.</summary>
+    /// <summary>Which release stage follows which: the ladder as it is actually climbed.</summary>
     /// <remarks>
     /// A workflow defines an order; this shows the order that happened, including the pairs the workflow does not
     /// mention. Both directions of a pair can appear, and that is data rather than noise: it means the stages are not in
@@ -516,7 +516,7 @@ public sealed class DiscoveryRepository
     /// The combined diagrams draw activities, not processes: a box says "Beleg freigegeben" and nothing about which
     /// process that box belongs to. Without this map the overview picture is the one place in the tool where a reader can
     /// see something and not get to it. A step that occurs in several processes is assigned to the one it happens in most
-    /// often — the alternative is a chooser for a click, and a click is not a question.
+    /// often. The alternative is a chooser for a click, and a click is not a question.
     /// </remarks>
     public Task<List<Dictionary<string, object?>>> StepHomeAsync(CancellationToken ct) =>
         Query.RunAsync(
