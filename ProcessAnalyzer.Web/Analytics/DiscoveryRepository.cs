@@ -40,7 +40,7 @@ public sealed class DiscoveryRepository
                 FROM analytics.object_lifecycle l
                 WHERE (@periodFrom::timestamptz IS NULL OR l.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR l.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(l.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY 1
             ),
             starts AS (
@@ -49,7 +49,7 @@ public sealed class DiscoveryRepository
                 WHERE seq = 1
                   AND (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 ORDER BY object_type, n DESC
             ),
             ends AS (
@@ -60,7 +60,7 @@ public sealed class DiscoveryRepository
                     FROM analytics.object_timeline
                     WHERE (@periodFrom::timestamptz IS NULL OR first_ts >= @periodFrom)
                       AND (@periodUntil::timestamptz IS NULL OR first_ts < @periodUntil)
-                      AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                      AND analytics.case_in_scope(object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                     ORDER BY object_id, seq DESC
                 ) t
                 ORDER BY t.object_type, n DESC
@@ -71,7 +71,7 @@ public sealed class DiscoveryRepository
                 JOIN dim.actor_role r ON r.actor_key = t.actor_key
                 WHERE (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY 1
             )
             SELECT analytics.label_object(l.object_type)        AS prozess,
@@ -130,7 +130,7 @@ public sealed class DiscoveryRepository
                   AND NOT analytics.is_decision(t.raw_event_type)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 ORDER BY t.object_id, t.seq
             ),
             decided AS (
@@ -140,7 +140,7 @@ public sealed class DiscoveryRepository
                   AND analytics.is_decision(t.raw_event_type)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             pairs AS (
                 SELECT s.object_type,
@@ -197,7 +197,7 @@ public sealed class DiscoveryRepository
                 WHERE analytics.is_person(t.actor_key)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             -- Grouped on the keys, labelled afterwards. The other way round runs person_with_role over every pair
             -- row before aggregating — four correlated lookups times a few thousand pairs, which turned a 7 ms
@@ -243,7 +243,7 @@ public sealed class DiscoveryRepository
                 JOIN dim.actor_role r ON r.actor_key = e.actor_key
                 WHERE (@periodFrom::timestamptz IS NULL OR e.ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR e.ts < @periodUntil)
-                  AND analytics.event_in_scope(e.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.event_in_scope(e.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY 1
             ),
             headcount AS (
@@ -285,7 +285,7 @@ public sealed class DiscoveryRepository
                 JOIN dim.actor_role r ON r.actor_key = t.actor_key
                 WHERE (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
                 GROUP BY 1, 2
             ),
             totals AS (SELECT event_type, sum(events) AS total FROM per_role GROUP BY 1),
@@ -347,7 +347,7 @@ public sealed class DiscoveryRepository
                OR e.type LIKE '%requested%')
               AND (@periodFrom::timestamptz IS NULL OR e.ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR e.ts < @periodUntil)
-              AND analytics.event_in_scope(e.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.event_in_scope(e.id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1, 2, 5
             ORDER BY anzahl DESC
             """,
@@ -370,7 +370,7 @@ public sealed class DiscoveryRepository
             WHERE t.prev_actor IS NOT NULL AND t.prev_actor <> t.actor_key
               AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
               AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+              AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             GROUP BY 1, 2
             HAVING count(DISTINCT t.object_id) >= 5
             ORDER BY uebergaben DESC
@@ -421,7 +421,7 @@ public sealed class DiscoveryRepository
                   AND analytics.is_person(t.actor_key)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             per_stage AS (
                 SELECT object_type,
@@ -488,7 +488,7 @@ public sealed class DiscoveryRepository
                   AND analytics.is_person(t.actor_key)
                   AND (@periodFrom::timestamptz IS NULL OR t.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR t.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(t.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             )
             SELECT analytics.label_object(a.object_type)   AS prozess,
                    a.object_type                          AS prozess_key,
@@ -554,7 +554,7 @@ public sealed class DiscoveryRepository
                 WHERE la.object_type <> lb.object_type
                   AND (@periodFrom::timestamptz IS NULL OR la.first_ts >= @periodFrom)
                   AND (@periodUntil::timestamptz IS NULL OR la.first_ts < @periodUntil)
-                  AND analytics.case_in_scope(ea.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep)
+                  AND analytics.case_in_scope(ea.object_id, @scopeGroup, @scopeHasStep, @scopeWithoutStep, @scopeProperty, @scopePropertyValue)
             ),
             -- One row per unordered pair, so the same handover is not reported twice with the arrow reversed.
             pair AS (

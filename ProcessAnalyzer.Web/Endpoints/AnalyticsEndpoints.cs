@@ -23,14 +23,25 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken token
-            ) => repo.InventoryAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), token)
+            ) =>
+                repo.InventoryAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    token
+                )
         );
 
         // The groups a question can be narrowed to. Only groups that actually did something: a directory has hundreds
         // of groups, most of which never appear in the log, and a select box of empty options is a worse answer than
         // none.
         group.MapGet("/groups", (AnalyticsRepository repo, CancellationToken token) => repo.ActorGroupsAsync(token));
+
+        // What a case IS, as opposed to what happened to it: its kind, its area, purchase or sale. The options for
+        // the property filter, with their coverage — a classification that only a handful of cases carry is a gap to
+        // report, not a filter to offer silently.
+        group.MapGet("/properties", (AnalyticsRepository repo, CancellationToken token) => repo.PropertiesAsync(token));
 
         group.MapPost(
             "/projection/rebuild",
@@ -69,8 +80,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.ProcessesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.ProcessesAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet(
             "/discovery/decisions",
@@ -81,8 +98,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.DecisionsAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.DecisionsAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet(
             "/discovery/collaboration",
@@ -93,8 +116,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.CollaborationAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.CollaborationAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet("/discovery/calendar", (DiscoveryRepository repo, CancellationToken t) => repo.CalendarAsync(t));
         group.MapGet(
@@ -106,8 +135,10 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.RolesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) => repo.RolesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue), t)
         );
         group.MapGet(
             "/discovery/who-does-what",
@@ -118,8 +149,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.WhoDoesWhatAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.WhoDoesWhatAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet(
             "/discovery/handovers",
@@ -130,8 +167,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.HandoversAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.HandoversAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet(
             "/discovery/role-handovers",
@@ -142,8 +185,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.RoleHandoverMatrixAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.RoleHandoverMatrixAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         // The landscape: what this company does end to end, from the events that touch two kinds of object at once.
         group.MapGet(
@@ -155,8 +204,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.LandscapeAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.LandscapeAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet("/discovery/coverage", (DiscoveryRepository repo, CancellationToken t) => repo.CoverageAsync(t));
         // Which process a step belongs to. Read once per screen so the combined pictures can be clicked into.
@@ -171,8 +226,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.ReleaseStagesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.ReleaseStagesAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
         group.MapGet(
             "/discovery/release-chain",
@@ -183,8 +244,14 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
-            ) => repo.ReleaseChainAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t)
+            ) =>
+                repo.ReleaseChainAsync(
+                    Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                    t
+                )
         );
 
         group.MapPost(
@@ -206,6 +273,8 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 string.IsNullOrWhiteSpace(objectType)
@@ -216,7 +285,7 @@ public static class AnalyticsEndpoints
                             objectType,
                             rows = await repo.ListAsync(
                                 objectType,
-                                Scope.FromQuery(from, until, group, hasStep, withoutStep),
+                                Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
                                 lastActivity,
                                 withActivity,
                                 search,
@@ -250,6 +319,8 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 string.IsNullOrWhiteSpace(objectType)
@@ -260,7 +331,7 @@ public static class AnalyticsEndpoints
                             objectType,
                             rows = await repo.TrendAsync(
                                 objectType,
-                                Scope.FromQuery(from, until, group, hasStep, withoutStep),
+                                Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
                                 t
                             ),
                         }
@@ -294,10 +365,18 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 Results.Ok(
-                    new { rows = await repo.QueueAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t) }
+                    new
+                    {
+                        rows = await repo.QueueAsync(
+                            Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                            t
+                        ),
+                    }
                 )
         );
         group.MapGet(
@@ -309,12 +388,17 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 Results.Ok(
                     new
                     {
-                        rows = await repo.AnomaliesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t),
+                        rows = await repo.AnomaliesAsync(
+                            Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                            t
+                        ),
                     }
                 )
         );
@@ -327,12 +411,17 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 Results.Ok(
                     new
                     {
-                        rows = await repo.FourEyesAsync(Scope.FromQuery(from, until, group, hasStep, withoutStep), t),
+                        rows = await repo.FourEyesAsync(
+                            Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
+                            t
+                        ),
                     }
                 )
         );
@@ -349,6 +438,8 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 string.IsNullOrWhiteSpace(key)
@@ -360,7 +451,7 @@ public static class AnalyticsEndpoints
                             name = await repo.ActorNameAsync(key, t),
                             rows = await repo.ActorProfileAsync(
                                 key,
-                                Scope.FromQuery(from, until, group, hasStep, withoutStep),
+                                Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
                                 t
                             ),
                         }
@@ -379,6 +470,8 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken t
             ) =>
                 string.IsNullOrWhiteSpace(objectType) || string.IsNullOrWhiteSpace(activity)
@@ -391,7 +484,7 @@ public static class AnalyticsEndpoints
                             rows = await repo.ActivityTrendAsync(
                                 objectType,
                                 activity,
-                                Scope.FromQuery(from, until, group, hasStep, withoutStep),
+                                Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue),
                                 t
                             ),
                         }
@@ -428,6 +521,8 @@ public static class AnalyticsEndpoints
                 string? group,
                 string? hasStep,
                 string? withoutStep,
+                string? property,
+                string? propertyValue,
                 CancellationToken token
             ) =>
             {
@@ -439,7 +534,7 @@ public static class AnalyticsEndpoints
                         }
                     );
 
-                var scope = Scope.FromQuery(from, until, group, hasStep, withoutStep);
+                var scope = Scope.FromQuery(from, until, group, hasStep, withoutStep, property, propertyValue);
 
                 return Results.Ok(
                     new

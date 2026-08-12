@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.Data.SqlClient;
 using ProcessAnalyzer.Web.Options;
 
@@ -67,6 +68,27 @@ public sealed class SqlJournalReader : IJournalSource
     /// Reads the object rows for an explicit list of event ids. The list is explicit — never a JOIN back to
     /// dbo.BusinessEvents — so the source only ever sees a bounded seek list, and so that events whose page the caller
     /// held back never drag their objects along.
+    /// <summary>
+    /// Whether the source carries object classifications yet.
+    /// </summary>
+    /// <remarks>
+    /// The column ships with a release of the source system, and this mirror is deployed independently of it. Selecting a
+    /// column that does not exist fails the whole read, so the absence has to be a fact the reader knows rather than a
+    /// crash it discovers. Checked per read: cheap against the catalogue, and it means a source that gains the column
+    /// starts being mirrored on the next pull instead of on the next restart.
+    /// </remarks>
+    private static async Task<bool> HasObjectAttributesAsync(SqlConnection connection, CancellationToken ct)
+    {
+        const string sql = """
+            SELECT CONVERT(int, COUNT(*))
+            FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.BusinessEventObjects') AND name = 'Attributes';
+            """;
+
+        await using var command = CreateCommand(connection, sql);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture) > 0;
+    }
+
     public async Task<IReadOnlyList<SourceEventObject>> ReadObjectsAsync(
         IReadOnlyList<long> eventSourceIds,
         CancellationToken ct
@@ -78,10 +100,16 @@ public sealed class SqlJournalReader : IJournalSource
         var results = new List<SourceEventObject>(eventSourceIds.Count);
         await using var connection = await OpenAsync(ct);
 
+        // Asked once per read, not per chunk, and never assumed: the classification column arrives with a release of the
+        // source system, and a mirror that selects a column the source does not have yet stops pulling entirely. Missing
+        // is a normal state here, not an error.
+        var hasAttributes = await HasObjectAttributesAsync(connection, ct);
+        var attributeColumn = hasAttributes ? ", o.Attributes" : string.Empty;
+
         foreach (var chunk in Chunk(eventSourceIds))
         {
             var sql = $"""
-                SELECT o.Id, o.BusinessEventId, o.ObjectType, o.ObjectId, o.Qualifier
+                SELECT o.Id, o.BusinessEventId, o.ObjectType, o.ObjectId, o.Qualifier{attributeColumn}
                 FROM dbo.BusinessEventObjects o WITH (READCOMMITTED)
                 WHERE o.BusinessEventId IN ({BuildIdList(chunk)})
                 ORDER BY o.BusinessEventId, o.Id;
@@ -99,7 +127,8 @@ public sealed class SqlJournalReader : IJournalSource
                         reader.GetInt64(1),
                         reader.GetString(2),
                         reader.GetString(3),
-                        reader.GetString(4)
+                        reader.GetString(4),
+                        hasAttributes && !reader.IsDBNull(5) ? reader.GetString(5) : null
                     )
                 );
             }

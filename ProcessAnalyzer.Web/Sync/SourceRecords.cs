@@ -24,7 +24,10 @@ public sealed record SourceEventObject(
     long EventSourceId,
     string ObjectType,
     string ObjectId,
-    string Qualifier
+    string Qualifier,
+    /// What the object IS, as JSON, when the source states it: its kind, purchase/sale, invoice/credit memo, area. Null
+    /// against a source that does not have the column yet, which is every installation until the release that adds it.
+    string? Attributes = null
 );
 
 /// The one interface in the project. The whole point of phase 1 is proving the watermark rule, and that has to be

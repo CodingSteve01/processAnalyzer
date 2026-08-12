@@ -32,7 +32,7 @@ public sealed partial class JournalMirror
         "payload"
     );
 
-    private const string ObjectColumns = "source_id, event_source_id, object_type, object_id, qualifier";
+    private const string ObjectColumns = "source_id, event_source_id, object_type, object_id, qualifier, attributes";
 
     /// <summary>
     /// Writes events and their objects in one transaction and returns the number of events actually inserted.
@@ -131,8 +131,12 @@ public sealed partial class JournalMirror
                 Param(command, ref index, o.ObjectType),
                 Param(command, ref index, o.ObjectId),
                 Param(command, ref index, o.Qualifier),
+                Param(command, ref index, (object?)o.Attributes ?? DBNull.Value),
             };
-            tuples.Add(BuildTuple(names, -1));
+            // The classification is jsonb in the mirror and text on the wire, so the last column carries the same cast the
+            // payload does. Null stays null: most references say nothing about their object, and an empty document would
+            // claim they did.
+            tuples.Add(BuildTuple(names, names.Length - 1));
         }
 
         // Conflict on the natural key rather than the mirrored id: re-reading an event's links has to be a no-op

@@ -18,6 +18,14 @@ let group = '';
 let groups = [];
 /** Cases that went through this step, and cases that never did. Both are keys, both are optional. */
 let steps = { has: null, hasLabel: null, without: null, withoutLabel: null };
+/**
+ * What the case IS: one classification and, optionally, one of its values.
+ *
+ * A name without a value asks "classified at all", which is the question behind every coverage gap — so the value slot
+ * is genuinely optional rather than defaulting to the first option.
+ */
+let property = { name: null, value: null };
+let properties = [];
 let onChange = () => {};
 
 /** The query suffix for an analytical request. Empty when nothing is filtered, so an unfiltered call stays unchanged. */
@@ -29,6 +37,8 @@ export function periodQuery() {
   if (group) parts.push(`group=${encodeURIComponent(group)}`);
   if (steps.has) parts.push(`hasStep=${encodeURIComponent(steps.has)}`);
   if (steps.without) parts.push(`withoutStep=${encodeURIComponent(steps.without)}`);
+  if (property.name) parts.push(`property=${encodeURIComponent(property.name)}`);
+  if (property.name && property.value) parts.push(`propertyValue=${encodeURIComponent(property.value)}`);
   return parts.length ? `&${parts.join('&')}` : '';
 }
 
@@ -62,6 +72,16 @@ export function activeFilters() {
   if (group) chips.push({ kind: 'group', label: `Gruppe: ${group}` });
   if (steps.has) chips.push({ kind: 'has', label: `mit „${steps.hasLabel ?? steps.has}"` });
   if (steps.without) chips.push({ kind: 'without', label: `ohne „${steps.withoutLabel ?? steps.without}"` });
+  if (property.name) {
+    chips.push({
+      kind: 'property',
+      // Without a value the filter says "carries this classification at all", and the chip has to say so — otherwise
+      // the reader takes it for a value filter and cannot explain the case count.
+      label: property.value
+        ? `${property.name}: ${property.value}`
+        : `${property.name}: überhaupt gesetzt`,
+    });
+  }
   return chips;
 }
 
@@ -73,6 +93,13 @@ function clearFilter(kind) {
   }
   if (kind === 'has') steps = { ...steps, has: null, hasLabel: null };
   if (kind === 'without') steps = { ...steps, without: null, withoutLabel: null };
+  if (kind === 'property') {
+    property = { name: null, value: null };
+    const name = document.getElementById('scopeProperty');
+    const value = document.getElementById('scopePropertyValue');
+    if (name) name.value = '';
+    if (value) fillPropertyValues(value, null);
+  }
   onChange();
   renderChips();
 }
@@ -183,12 +210,39 @@ export function initPeriod(container, changed) {
     <label class="scope">
       Gruppe
       <select id="scopeGroup"><option value="">alle Gruppen</option></select>
+    </label>
+    <label class="scope">
+      Merkmal
+      <select id="scopeProperty"><option value="">ohne Merkmal</option></select>
+    </label>
+    <label class="scope">
+      Wert
+      <select id="scopePropertyValue" disabled><option value="">alle Werte</option></select>
     </label>`;
 
   const preset = container.querySelector('#periodPreset');
   const from = container.querySelector('#periodFrom');
   const until = container.querySelector('#periodUntil');
   const groupSelect = container.querySelector('#scopeGroup');
+  const propertySelect = container.querySelector('#scopeProperty');
+  const propertyValueSelect = container.querySelector('#scopePropertyValue');
+
+  propertySelect.addEventListener('change', () => {
+    // Changing the classification drops the old value: a value picked for one property, carried over to another, is a
+    // filter that matches nothing, and an empty screen reads as missing data rather than as a stale selection.
+    property = { name: propertySelect.value || null, value: null };
+    fillPropertyValues(propertyValueSelect, property.name);
+    onChange();
+    renderChips();
+  });
+
+  propertyValueSelect.addEventListener('change', () => {
+    property = { ...property, value: propertyValueSelect.value || null };
+    onChange();
+    renderChips();
+  });
+
+  loadProperties(propertySelect);
 
   groupSelect.addEventListener('change', () => {
     group = groupSelect.value;
@@ -222,6 +276,59 @@ export function initPeriod(container, changed) {
  * groups", which is the state the page would have had anyway, and a red banner over a working dashboard because one
  * optional select box is empty would be the worse trade.
  */
+/**
+ * Fills the classification select. Silent on failure for the same reason as the group list.
+ *
+ * The control stays hidden until there is something to choose: the source only started stating classifications with
+ * the object-attribute change, so on a mirror that has none yet an empty select would promise a distinction the data
+ * cannot make.
+ */
+async function loadProperties(select) {
+  try {
+    const response = await fetch('/api/properties', { headers: { Accept: 'application/json' } });
+    if (!response.ok) return;
+    properties = await response.json();
+  } catch {
+    return;
+  }
+
+  const names = [...new Set(properties.map((row) => row.name))].sort();
+  if (names.length === 0) {
+    for (const id of ['scopeProperty', 'scopePropertyValue']) {
+      const label = document.getElementById(id)?.closest('label');
+      if (label) label.hidden = true;
+    }
+    return;
+  }
+
+  for (const name of names) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    select.append(option);
+  }
+}
+
+/**
+ * Fills the value select for one classification, or empties and disables it for none.
+ *
+ * The case count travels with each value, because it is what tells a reader whether a value is the main path or an
+ * exception — and because a value that covers four cases out of nine thousand should not look like a serious filter.
+ */
+function fillPropertyValues(select, name) {
+  const nf = new Intl.NumberFormat('de-DE');
+  select.innerHTML = '<option value="">alle Werte</option>';
+  select.disabled = !name;
+  if (!name) return;
+
+  for (const row of properties.filter((entry) => entry.name === name).sort((a, b) => b.faelle - a.faelle)) {
+    const option = document.createElement('option');
+    option.value = row.value;
+    option.textContent = `${row.value} (${nf.format(row.faelle)})`;
+    select.append(option);
+  }
+}
+
 async function loadGroups(select) {
   try {
     const response = await fetch('/api/groups', { headers: { Accept: 'application/json' } });
